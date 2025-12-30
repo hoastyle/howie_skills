@@ -1,0 +1,75 @@
+{
+  "name": "howie-airis-skills",
+  "version": "0.9.0",
+  "description": "7 个 AIRIS MCP Gateway Helper Skills，简化常见 MCP 操作。包含 Web 研究、代码搜索、知识管理、浏览器自动化等核心功能。",
+  "author": "Hao",
+  "license": "MIT",
+  "repository": "https://github.com/your-org/howie_skills",
+  "homepage": "https://github.com/your-org/howie_skills#readme",
+  "keywords": [
+    "airis",
+    "mcp",
+    "skills",
+    "helper",
+    "web-research",
+    "code-search",
+    "knowledge-management"
+  ],
+  "skills": [
+    {
+      "name": "airis-web-research",
+      "path": "skills/airis-web-research",
+      "description": "完整的 Web 研究流程 (Tavily + Fetch + Serena)",
+      "version": "1.0.0",
+      "status": "stable"
+    },
+    {
+      "name": "airis-code-search",
+      "path": "skills/airis-code-search",
+      "description": "代码搜索和编辑 (MorphLLM 占位符模式)",
+      "version": "0.9.0",
+      "status": "beta"
+    },
+    {
+      "name": "airis-knowledge-mgmt",
+      "path": "skills/airis-knowledge-mgmt",
+      "description": "知识图谱管理 (Memory + Serena)",
+      "version": "0.9.0",
+      "status": "alpha"
+    },
+    {
+      "name": "airis-browser-automation",
+      "path": "skills/airis-browser-automation",
+      "description": "浏览器自动化 (Playwright)",
+      "version": "0.0.1",
+      "status": "planned"
+    },
+    {
+      "name": "airis-library-docs",
+      "path": "skills/airis-library-docs",
+      "description": "库文档查询 (Context7)",
+      "version": "0.0.1",
+      "status": "planned"
+    },
+    {
+      "name": "airis-ui-generation",
+      "path": "skills/airis-ui-generation",
+      "description": "UI 组件生成 (Magic)",
+      "version": "0.0.1",
+      "status": "planned"
+    },
+    {
+      "name": "airis-project-indexing",
+      "path": "skills/airis-project-indexing",
+      "description": "项目索引分析 (AIRIS Agent)",
+      "version": "0.0.1",
+      "status": "planned"
+    }
+  ],
+  "dependencies": {
+    "airis-mcp-gateway": "^1.0.0"
+  },
+  "engines": {
+    "claude-code": ">=1.0.0"
+  }
+}
