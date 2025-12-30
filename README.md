@@ -3,7 +3,7 @@
 > 7 个 Helper Skills 简化 AIRIS MCP Gateway 常见操作
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](https://github.com/your-org/howie_skills)
+[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/your-org/howie_skills)
 
 ---
 
@@ -57,22 +57,19 @@ ls ~/.claude/skills/
 
 ## 📚 Skills 索引
 
-### MVP Release (v0.9.0) - 3 个核心 Skills
+### Full Release (v1.0.0) - 7 个完整 Skills ✅
 
 | Skill | 功能 | MCP 服务器 | 复杂度 | 行数 | 状态 |
 |-------|------|-----------|--------|------|------|
-| **airis-web-research** | Web 研究流程 (Tavily → Fetch → Serena) | tavily, fetch, serena | 中等 | 250 | ✅ 完成 |
-| **airis-code-search** | 代码搜索编辑 (MorphLLM 占位符模式) | morphllm, serena | 中高 | 280 | 🚧 开发中 |
-| **airis-knowledge-mgmt** | 知识图谱管理 (Memory + Serena) | memory, serena | 中等 | 260 | 📋 计划中 |
+| **airis-web-research** | Web 研究流程 (Tavily → Fetch → Serena) | tavily, fetch, serena | 中等 | 558 | ✅ 完成 |
+| **airis-code-search** | 代码搜索编辑 (MorphLLM 占位符模式) | morphllm, serena | 中高 | 622 | ✅ 完成 |
+| **airis-knowledge-mgmt** | 知识图谱管理 (Memory + Serena) | memory, serena | 中等 | 572 | ✅ 完成 |
+| **airis-browser-automation** | 浏览器自动化 (Playwright snapshot vs screenshot) | playwright | 中高 | 560 | ✅ 完成 |
+| **airis-library-docs** | 库文档查询 (Context7 两步流程) | context7 | 简单 | 461 | ✅ 完成 |
+| **airis-ui-generation** | UI 组件生成 (Magic 绝对路径模式) | magic | 简单 | 420 | ✅ 完成 |
+| **airis-project-indexing** | 项目索引分析 (AIRIS Agent 三功能) | airis-agent | 中等 | 305 | ✅ 完成 |
 
-### Full Release (v1.0.0) - 7 个完整 Skills
-
-| Skill | 功能 | MCP 服务器 | 复杂度 | 行数 | 状态 |
-|-------|------|-----------|--------|------|------|
-| **airis-browser-automation** | 浏览器自动化 (Playwright) | playwright | 中高 | 300 | 📋 计划中 |
-| **airis-library-docs** | 库文档查询 (Context7) | context7 | 简单 | 200 | 📋 计划中 |
-| **airis-ui-generation** | UI 组件生成 (Magic) | magic | 简单 | 220 | 📋 计划中 |
-| **airis-project-indexing** | 项目索引分析 (AIRIS Agent) | airis-agent | 中等 | 240 | 📋 计划中 |
+**总行数**: 3,498 行（仅 SKILL.md）
 
 ---
 
@@ -173,5 +170,5 @@ Claude: [自动触发 airis-web-research skill]
 ---
 
 **最后更新**: 2025-12-30
-**版本**: 0.9.0 (MVP)
+**版本**: 1.0.0 (Full Release) 🎉
 **维护者**: Hao
