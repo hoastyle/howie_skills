@@ -476,6 +476,678 @@ npx playwright --version
 
 ---
 
+## 🔌 AIRIS MCP Gateway 标准访问模式（完整版）
+
+本章节展示完整的 AIRIS MCP Gateway 访问模式，确保工具使用的标准化和可靠性。
+
+### 四步标准化工作流
+
+#### Step 1: 工具发现 (airis-find)
+
+使用 `airis-find` 发现本 skill 使用的 MCP 工具：
+
+```typescript
+// 发现 Playwright 浏览器自动化工具
+const playwrightTools = await airis-find({
+  query: "playwright"
+});
+console.log("Playwright 工具:", playwrightTools.map(t => t.name));
+// 输出: ["playwright:browser_navigate", "playwright:browser_snapshot",
+//        "playwright:browser_screenshot", "playwright:browser_click",
+//        "playwright:browser_fill", ...]
+```
+
+**为什么需要这一步？**
+- 发现新工具和功能
+- 确认工具名称拼写
+- 了解 Playwright MCP 提供的所有能力
+- 验证 Playwright MCP 服务器已正确安装
+
+---
+
+#### Step 2: 参数验证 (airis-schema)
+
+在执行前，使用 `airis-schema` 检查工具的参数要求：
+
+```typescript
+// 检查导航参数
+const navigateSchema = await airis-schema({
+  tool: "playwright:browser_navigate"
+});
+console.log("必需参数:", navigateSchema.inputSchema.required);
+// 输出: ["url"]
+console.log("可选参数:", Object.keys(navigateSchema.inputSchema.properties));
+// 输出: ["url", "wait_until"]
+
+// 检查截图参数
+const screenshotSchema = await airis-schema({
+  tool: "playwright:browser_screenshot"
+});
+console.log("Screenshot 参数:", screenshotSchema.inputSchema.properties);
+// 输出: {full_page, format, quality, selector}
+```
+
+**常见参数命名陷阱**（本 skill 涉及）:
+- ⚠️ `wait_until` 值必须是 `load` | `domcontentloaded` | `networkidle`（严格匹配）
+- ⚠️ `ref` vs `selector` - 只能二选一，不能同时使用
+- ⚠️ `format` 必须是 `png` | `jpeg`（小写）
+
+通过 `airis-schema` 可以避免 90% 的参数错误！
+
+---
+
+#### Step 3: 执行工具 (airis-exec)
+
+验证参数后，使用 `airis-exec` 执行工具（已在上面的工作流程中详细说明）。
+
+---
+
+#### Step 4: 健康检查 (gateway-control)
+
+在执行工具前，检查 AIRIS MCP Gateway 状态：
+
+```typescript
+// 检查 Gateway 健康状态
+const health = await airis-exec({
+  tool: "gateway-control:health"
+});
+
+if (!health.ok) {
+  throw new Error("AIRIS MCP Gateway 不可用，请检查 Gateway 是否正在运行");
+}
+
+// 列出可用的 MCP 服务器
+const servers = await airis-exec({
+  tool: "gateway-control:list-servers"
+});
+
+console.log("可用服务器:", servers.map(s => s.name));
+
+// 验证 Playwright 服务器已启动
+const playwrightServer = servers.find(s => s.name === "playwright");
+
+if (!playwrightServer) {
+  throw new Error("Playwright 服务器未安装");
+}
+
+if (playwrightServer.mode === "COLD" && !playwrightServer.ready) {
+  console.log("⏳ 等待 Playwright 启动（COLD 模式，浏览器初始化需要 3-8 秒）...");
+  await sleep(5000);
+}
+
+console.log("✅ Playwright MCP 服务器已就绪");
+```
+
+**什么时候需要健康检查？**
+- ✅ 长时间运行的自动化测试套件
+- ✅ 生产环境部署
+- ✅ 首次使用 Playwright（浏览器可能未安装）
+- ⚠️ 快速原型开发时可以跳过（但要处理错误）
+
+---
+
+### 完整示例：端到端标准化工作流
+
+```typescript
+async function standardizedBrowserAutomation(url: string, taskDescription: string) {
+  // Step 1: 健康检查
+  const health = await airis-exec({
+    tool: "gateway-control:health"
+  });
+
+  if (!health.ok) {
+    throw new Error("Gateway 不可用");
+  }
+
+  // Step 2: 发现工具
+  const tools = await airis-find({ query: "playwright navigate" });
+  const navigateTool = tools.find(t => t.name === "playwright:browser_navigate");
+
+  if (!navigateTool) {
+    throw new Error("Playwright 导航工具未找到");
+  }
+
+  // Step 3: 验证参数
+  const schema = await airis-schema({ tool: navigateTool.name });
+  console.log("工具参数:", schema.inputSchema);
+
+  // Step 4: 执行导航
+  await airis-exec({
+    tool: "playwright:browser_navigate",
+    arguments: {
+      url: url,
+      wait_until: "networkidle"
+    }
+  });
+
+  // Step 5: 获取页面状态
+  const snapshot = await airis-exec({
+    tool: "playwright:browser_snapshot",
+    arguments: {
+      include_text: true,
+      include_attributes: true
+    }
+  });
+
+  // Step 6: 截图保存
+  const screenshot = await airis-exec({
+    tool: "playwright:browser_screenshot",
+    arguments: {
+      full_page: true,
+      format: "png"
+    }
+  });
+
+  return { snapshot, screenshot };
+}
+```
+
+---
+
+## ⚙️ 服务运行模式
+
+### MCP 服务器特性
+
+本 skill 使用 **Playwright MCP 服务器**（COLD 模式）：
+
+| 服务器 | 工具数 | 运行模式 | 启动延迟 | 首次调用建议 |
+|--------|--------|---------|---------|-------------|
+| **playwright** | 8+ | COLD ❄️ | 3-8 秒 | 浏览器安装检查 + 健康检查 |
+
+### COLD 模式说明
+
+**COLD 模式服务器特点**:
+- ❄️ 按需启动，首次调用需要 3-8 秒启动时间
+  - Playwright 启动包括：进程启动 + 浏览器初始化 + 上下文创建
+- 💤 长时间不用会自动休眠
+- 🔄 重新启动需要等待
+- 🌐 浏览器类型影响启动时间（Chromium < Firefox < WebKit）
+- 📊 适合批量操作（复用已启动的浏览器实例）
+
+**vs HOT 模式**（不适用于 Playwright）:
+- 🔥 常驻内存，即时响应
+- ⚡ 无启动延迟
+- 🎯 适合高频率调用
+
+### 性能优化建议
+
+#### 对于 COLD 模式服务器（Playwright）:
+
+1. **首次调用前执行健康检查**
+   ```typescript
+   const health = await airis-exec({ tool: "gateway-control:health" });
+   ```
+
+2. **预期并处理浏览器启动延迟**
+   ```typescript
+   // 首次调用可能需要等待浏览器启动
+   try {
+     const result = await airis-exec({
+       tool: "playwright:browser_navigate",
+       arguments: { url: "..." }
+     });
+   } catch (error) {
+     if (error.message.includes("browser not ready") || error.message.includes("server not ready")) {
+       console.log("浏览器正在启动，等待 5 秒后重试...");
+       await sleep(5000);
+       // 重试
+       const result = await airis-exec({
+         tool: "playwright:browser_navigate",
+         arguments: { url: "..." }
+       });
+     }
+   }
+   ```
+
+3. **实现重试机制**（推荐）
+   ```typescript
+   async function execWithRetry(tool, arguments, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await airis-exec({ tool, arguments });
+       } catch (error) {
+         if (i === maxRetries - 1) throw error;
+         console.log(`重试 ${i + 1}/${maxRetries}...`);
+         await sleep(3000);
+       }
+     }
+   }
+   ```
+
+4. **批量操作时复用已启动的浏览器**
+   ```typescript
+   // ✅ 高效：复用已启动的 Playwright 浏览器
+   const urls = [
+     "https://example.com/page1",
+     "https://example.com/page2",
+     "https://example.com/page3"
+   ];
+
+   for (const url of urls) {
+     await airis-exec({
+       tool: "playwright:browser_navigate",
+       arguments: { url, wait_until: "networkidle" }
+     });
+
+     const screenshot = await airis-exec({
+       tool: "playwright:browser_screenshot",
+       arguments: { full_page: true, format: "png" }
+     });
+     // 后续调用无需浏览器启动延迟
+   }
+
+   // ❌ 低效：每次都可能触发浏览器启动
+   // （如果在调用之间等待时间过长，浏览器可能关闭）
+   ```
+
+5. **检查浏览器是否已安装**
+   ```typescript
+   // Playwright 首次使用时，浏览器可能未安装
+   // MCP 会自动提示安装命令，但最好提前检查
+   try {
+     await airis-exec({
+       tool: "playwright:browser_navigate",
+       arguments: { url: "https://example.com" }
+     });
+   } catch (error) {
+     if (error.message.includes("browser not found") || error.message.includes("chromium")) {
+       console.error(`
+         ❌ Playwright 浏览器未安装。请运行以下命令：
+
+         npx playwright install chromium
+
+         或安装所有浏览器：
+         npx playwright install
+       `);
+       throw new Error("Playwright 浏览器未安装");
+     }
+   }
+   ```
+
+### 服务可用性检查
+
+```typescript
+async function ensurePlaywrightAvailable() {
+  const servers = await airis-exec({
+    tool: "gateway-control:list-servers"
+  });
+
+  const playwright = servers.find(s => s.name === "playwright");
+
+  if (!playwright) {
+    throw new Error("Playwright 服务器不存在或未安装");
+  }
+
+  if (playwright.mode === "COLD" && !playwright.ready) {
+    console.log("⏳ 等待 Playwright 启动（COLD 模式，浏览器初始化中）...");
+    await sleep(5000);
+
+    // 验证服务器是否已就绪
+    const updatedServers = await airis-exec({
+      tool: "gateway-control:list-servers"
+    });
+    const updatedPlaywright = updatedServers.find(s => s.name === "playwright");
+
+    if (!updatedPlaywright.ready) {
+      throw new Error("Playwright 启动失败，请检查浏览器是否已安装");
+    }
+  }
+
+  return playwright;
+}
+
+// 使用示例
+await ensurePlaywrightAvailable();
+```
+
+---
+
+## 🔄 统一错误处理
+
+### 错误分类体系
+
+本 skill 的错误可分为 4 大类：
+
+#### 1. 参数错误 → 使用 airis-schema 预验证
+
+**典型错误**:
+```
+Error: Invalid parameter 'wait_for' (should be 'wait_until')
+Error: Unknown value 'idle' for wait_until (should be 'networkidle')
+Error: Both 'ref' and 'selector' provided (choose one)
+```
+
+**处理策略**:
+```typescript
+// ✅ 推荐：执行前验证
+const schema = await airis-schema({ tool: "playwright:browser_navigate" });
+const requiredParams = schema.inputSchema.required;
+
+// 检查必需参数
+if (!arguments.url) {
+  throw new Error("缺少必需参数: url");
+}
+
+// 检查 wait_until 值是否合法
+const validWaitUntil = ["load", "domcontentloaded", "networkidle"];
+if (arguments.wait_until && !validWaitUntil.includes(arguments.wait_until)) {
+  throw new Error(`wait_until 必须是 ${validWaitUntil.join(" | ")} 之一`);
+}
+
+// 执行工具
+await airis-exec({
+  tool: "playwright:browser_navigate",
+  arguments: { /* 验证后的参数 */ }
+});
+```
+
+**预防措施**:
+- 总是使用 `airis-schema` 查询正确的参数名
+- 参考本文档的"常见陷阱"章节
+- 使用 TypeScript 类型定义（如果可用）
+
+---
+
+#### 2. Gateway 错误 → 检查健康状态
+
+**典型错误**:
+```
+Error: Failed to connect to AIRIS MCP Gateway
+Error: Gateway timeout
+```
+
+**处理策略**:
+```typescript
+try {
+  const health = await airis-exec({
+    tool: "gateway-control:health"
+  });
+
+  if (!health.ok) {
+    throw new Error("Gateway 不健康");
+  }
+} catch (error) {
+  console.error("Gateway 错误:", error.message);
+
+  // 提供用户友好的错误信息
+  throw new Error(`
+    AIRIS MCP Gateway 不可用。请检查：
+    1. Gateway 是否正在运行（http://localhost:9400/health）
+    2. 网络连接是否正常
+    3. 防火墙设置是否阻止连接
+  `);
+}
+```
+
+**预防措施**:
+- 工作流开始前执行健康检查
+- 实现重试机制（最多 3 次，间隔 2 秒）
+- 提供清晰的错误提示和修复建议
+
+---
+
+#### 3. 浏览器错误 → 具体错误具体处理
+
+**典型错误**:
+```
+Error: Playwright browser not found
+Error: Element not found
+Error: Element is stale
+Error: Navigation timeout
+```
+
+**处理策略**:
+
+**浏览器未安装**:
+```typescript
+try {
+  await airis-exec({
+    tool: "playwright:browser_navigate",
+    arguments: { url: "https://example.com" }
+  });
+} catch (error) {
+  if (error.message.includes("browser not found") || error.message.includes("chromium")) {
+    console.error(`
+      ❌ Playwright 浏览器未安装。请运行：
+
+      npx playwright install chromium
+
+      或安装所有浏览器：
+      npx playwright install
+    `);
+    throw new Error("Playwright 浏览器未安装");
+  }
+  throw error;
+}
+```
+
+**元素未找到**:
+```typescript
+try {
+  const page = await airis-exec({
+    tool: "playwright:browser_snapshot",
+    arguments: { include_text: true }
+  });
+
+  const targetElement = page.elements.find(e => e.name === "login");
+
+  if (!targetElement) {
+    throw new Error("登录表单元素未找到");
+  }
+} catch (error) {
+  if (error.message.includes("not found")) {
+    console.log("元素未找到，可能页面未完全加载，重新获取 snapshot...");
+    await sleep(2000);
+    // 重试
+    const page = await airis-exec({
+      tool: "playwright:browser_snapshot",
+      arguments: { include_text: true }
+    });
+  }
+  throw error;
+}
+```
+
+**元素陈旧（Element is stale）**:
+```typescript
+// 问题：snapshot 获取的 ref 在页面变化后失效
+try {
+  await airis-exec({
+    tool: "playwright:browser_click",
+    arguments: { ref: "elem_123" }
+  });
+} catch (error) {
+  if (error.message.includes("stale") || error.message.includes("detached")) {
+    console.log("元素已失效，重新获取 snapshot...");
+    // 重新获取 snapshot
+    const newPage = await airis-exec({
+      tool: "playwright:browser_snapshot",
+      arguments: { include_text: true }
+    });
+
+    const newRef = newPage.elements.find(e => /* 重新定位元素 */).ref;
+
+    // 使用新的 ref 重试
+    await airis-exec({
+      tool: "playwright:browser_click",
+      arguments: { ref: newRef }
+    });
+  }
+  throw error;
+}
+```
+
+**导航超时**:
+```typescript
+try {
+  await airis-exec({
+    tool: "playwright:browser_navigate",
+    arguments: {
+      url: "https://slow-site.com",
+      wait_until: "networkidle"
+    }
+  });
+} catch (error) {
+  if (error.message.includes("timeout") || error.message.includes("navigation")) {
+    console.log("导航超时，使用 load 等待条件重试...");
+    // 使用更宽松的等待条件
+    await airis-exec({
+      tool: "playwright:browser_navigate",
+      arguments: {
+        url: "https://slow-site.com",
+        wait_until: "load"  // 更快但可能未完全加载
+      }
+    });
+  }
+  throw error;
+}
+```
+
+---
+
+#### 4. 服务不可用 → 重试或回退
+
+**典型错误**:
+```
+Error: Playwright server not ready
+Error: Server startup timeout
+```
+
+**处理策略**:
+```typescript
+async function executeWithServerRetry(tool, arguments, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await airis-exec({ tool, arguments });
+    } catch (error) {
+      if (error.message.includes("not ready") || error.message.includes("starting")) {
+        if (i === maxRetries - 1) {
+          throw new Error(`Playwright 服务器启动失败（已重试 ${maxRetries} 次）`);
+        }
+
+        const waitTime = (i + 1) * 3000;  // 递增等待时间
+        console.log(`Playwright 正在启动，等待 ${waitTime/1000} 秒后重试...`);
+        await sleep(waitTime);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+}
+
+// 使用示例
+const result = await executeWithServerRetry(
+  "playwright:browser_navigate",
+  { url: "https://example.com", wait_until: "networkidle" }
+);
+```
+
+**回退方案**:
+```typescript
+try {
+  // 尝试使用 Playwright
+  const screenshot = await airis-exec({
+    tool: "playwright:browser_screenshot",
+    arguments: { full_page: true }
+  });
+} catch (error) {
+  if (error.message.includes("not available") || error.message.includes("not installed")) {
+    console.warn("⚠️ Playwright 不可用，回退到 Fetch 方案...");
+
+    // 回退：使用 Fetch 获取 HTML（无法截图，但可以获取内容）
+    const htmlContent = await airis-exec({
+      tool: "fetch:fetch",
+      arguments: { url: "https://example.com" }
+    });
+
+    console.log("✅ 已获取 HTML 内容（无截图）");
+    return { html: htmlContent, screenshot: null };
+  }
+
+  throw error;
+}
+```
+
+---
+
+### 完整错误处理示例（端到端）
+
+```typescript
+async function robustBrowserAutomation(url: string) {
+  // Step 1: Gateway 健康检查（错误类型 2）
+  try {
+    const health = await airis-exec({ tool: "gateway-control:health" });
+    if (!health.ok) {
+      throw new Error("Gateway 不健康");
+    }
+  } catch (error) {
+    throw new Error(`Gateway 不可用: ${error.message}`);
+  }
+
+  // Step 2: 确保 Playwright 可用（错误类型 4）
+  await ensurePlaywrightAvailable();
+
+  // Step 3: 参数验证（错误类型 1）
+  const schema = await airis-schema({ tool: "playwright:browser_navigate" });
+  if (!url || typeof url !== "string") {
+    throw new Error("url 参数必须是非空字符串");
+  }
+
+  // Step 4: 导航（错误类型 3 - 超时）
+  try {
+    await airis-exec({
+      tool: "playwright:browser_navigate",
+      arguments: { url, wait_until: "networkidle" }
+    });
+  } catch (error) {
+    if (error.message.includes("timeout")) {
+      console.warn("导航超时，使用 load 等待条件重试...");
+      await airis-exec({
+        tool: "playwright:browser_navigate",
+        arguments: { url, wait_until: "load" }
+      });
+    } else {
+      throw error;
+    }
+  }
+
+  // Step 5: 获取 snapshot（错误类型 3 - 元素未找到）
+  let snapshot;
+  try {
+    snapshot = await airis-exec({
+      tool: "playwright:browser_snapshot",
+      arguments: { include_text: true, include_attributes: true }
+    });
+  } catch (error) {
+    console.warn("Snapshot 失败，等待 2 秒后重试...");
+    await sleep(2000);
+    snapshot = await airis-exec({
+      tool: "playwright:browser_snapshot",
+      arguments: { include_text: true, include_attributes: true }
+    });
+  }
+
+  // Step 6: 截图（错误类型 3 - 浏览器未安装）
+  let screenshot;
+  try {
+    screenshot = await airis-exec({
+      tool: "playwright:browser_screenshot",
+      arguments: { full_page: true, format: "png" }
+    });
+  } catch (error) {
+    if (error.message.includes("browser not found")) {
+      throw new Error("Playwright 浏览器未安装，请运行: npx playwright install chromium");
+    }
+    throw error;
+  }
+
+  return { snapshot, screenshot };
+}
+```
+
+---
+
 ## 📚 参考文档
 
 ### References 文件

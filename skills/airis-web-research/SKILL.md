@@ -422,6 +422,638 @@ ${originalUrl}
 
 ---
 
+## 🔌 AIRIS MCP Gateway 标准访问模式（完整版）
+
+本章节展示完整的 AIRIS MCP Gateway 访问模式，确保工具使用的标准化和可靠性。
+
+### 四步标准化工作流
+
+#### Step 1: 工具发现 (airis-find)
+
+使用 `airis-find` 发现本 skill 使用的 MCP 工具：
+
+```typescript
+// 发现 Tavily 搜索工具
+const tavilyTools = await airis-find({
+  query: "tavily"
+});
+console.log("Tavily 工具:", tavilyTools.map(t => t.name));
+// 输出: ["tavily:search", "tavily:extract"]
+
+// 发现 Fetch 提取工具
+const fetchTools = await airis-find({
+  query: "fetch"
+});
+console.log("Fetch 工具:", fetchTools.map(t => t.name));
+// 输出: ["fetch:fetch"]
+
+// 发现 Serena 记忆工具
+const serenaTools = await airis-find({
+  query: "serena memory"
+});
+console.log("Serena 记忆工具:", serenaTools.map(t => t.name));
+// 输出: ["serena:write_memory", "serena:read_memory", "serena:list_memories", ...]
+```
+
+**为什么需要这一步？**
+- 发现新工具和功能
+- 确认工具名称拼写
+- 了解服务器提供的所有能力
+- 验证 MCP 服务器已正确安装
+
+---
+
+#### Step 2: 参数验证 (airis-schema)
+
+在执行前，使用 `airis-schema` 检查工具的参数要求：
+
+```typescript
+// 检查 Tavily 搜索参数
+const tavilySearchSchema = await airis-schema({
+  tool: "tavily:search"
+});
+console.log("必需参数:", tavilySearchSchema.inputSchema.required);
+// 输出: ["query"]
+console.log("可选参数:", Object.keys(tavilySearchSchema.inputSchema.properties));
+// 输出: ["query", "search_depth", "max_results", "include_domains", "exclude_domains"]
+
+// 检查 Serena 保存参数
+const serenaWriteSchema = await airis-schema({
+  tool: "serena:write_memory"
+});
+console.log("Serena 参数:", serenaWriteSchema.inputSchema.required);
+// 输出: ["memory_file_name", "content"]
+```
+
+**常见参数命名陷阱**（本 skill 涉及）:
+- ⚠️ `filename` ❌ vs `memory_file_name` ✅ (Serena)
+- ⚠️ Tavily `query` 建议包含年份（如 "React 2025"）获取最新信息
+- ⚠️ Tavily `search_depth` 影响响应时间（basic < 2s，advanced 2-5s）
+
+通过 `airis-schema` 可以避免 90% 的参数错误！
+
+---
+
+#### Step 3: 执行工具 (airis-exec)
+
+验证参数后，使用 `airis-exec` 执行工具（已在上面的工作流程中详细说明）。
+
+---
+
+#### Step 4: 健康检查 (gateway-control)
+
+在执行工具前，检查 AIRIS MCP Gateway 状态：
+
+```typescript
+// 检查 Gateway 健康状态
+const health = await airis-exec({
+  tool: "gateway-control:health"
+});
+
+if (!health.ok) {
+  throw new Error("AIRIS MCP Gateway 不可用，请检查 Gateway 是否正在运行");
+}
+
+// 列出可用的 MCP 服务器
+const servers = await airis-exec({
+  tool: "gateway-control:list-servers"
+});
+
+console.log("可用服务器:", servers.map(s => s.name));
+
+// 验证本 skill 需要的服务器已启动
+const requiredServers = ["tavily", "fetch", "serena"];
+for (const serverName of requiredServers) {
+  const server = servers.find(s => s.name === serverName);
+
+  if (!server) {
+    throw new Error(`服务器 ${serverName} 未安装`);
+  }
+
+  if (server.mode === "COLD" && !server.ready) {
+    console.log(`⏳ 等待 ${serverName} 启动（COLD 模式，需要 2-5 秒）...`);
+    await sleep(3000);
+  }
+}
+
+console.log("✅ 所有必需的 MCP 服务器已就绪");
+```
+
+**什么时候需要健康检查？**
+- ✅ 长时间运行的 workflow（如批量研究任务）
+- ✅ 生产环境部署
+- ✅ 首次使用 COLD 模式服务器
+- ⚠️ 快速原型开发时可以跳过（但要处理错误）
+
+---
+
+### 完整示例：端到端标准化工作流
+
+```typescript
+async function standardizedWebResearch(topic: string) {
+  // Step 1: 健康检查
+  const health = await airis-exec({
+    tool: "gateway-control:health"
+  });
+
+  if (!health.ok) {
+    throw new Error("Gateway 不可用");
+  }
+
+  // Step 2: 发现工具
+  const tools = await airis-find({ query: "tavily search" });
+  const searchTool = tools.find(t => t.name === "tavily:search");
+
+  if (!searchTool) {
+    throw new Error("Tavily 搜索工具未找到");
+  }
+
+  // Step 3: 验证参数
+  const schema = await airis-schema({ tool: searchTool.name });
+  console.log("工具参数:", schema.inputSchema);
+
+  // Step 4: 执行搜索
+  const results = await airis-exec({
+    tool: "tavily:search",
+    arguments: {
+      query: `${topic} 2025`,
+      search_depth: "advanced",
+      max_results: 5
+    }
+  });
+
+  // Step 5: 保存到记忆
+  await airis-exec({
+    tool: "serena:write_memory",
+    arguments: {
+      memory_file_name: `research-${topic.toLowerCase().replace(/\s+/g, "-")}.md`,
+      content: formatResearchResults(results)
+    }
+  });
+
+  return results;
+}
+```
+
+---
+
+## ⚙️ 服务运行模式
+
+### MCP 服务器特性
+
+本 skill 使用的 3 个 MCP 服务器均为 **COLD 模式**：
+
+| 服务器 | 工具数 | 运行模式 | 启动延迟 | 首次调用建议 |
+|--------|--------|---------|---------|-------------|
+| **tavily** | 4 | COLD ❄️ | 2-5 秒 | 使用前检查健康状态 |
+| **fetch** | 1 | COLD ❄️ | 2-5 秒 | 首次调用可能失败，需重试 |
+| **serena** | 23 | COLD ❄️ | 2-5 秒 | 项目激活需要额外时间 |
+
+### COLD 模式说明
+
+**COLD 模式服务器特点**:
+- ❄️ 按需启动，首次调用需要 2-5 秒启动时间
+- 💤 长时间不用会自动休眠
+- 🔄 重新启动需要等待
+- 📊 适合批量操作（复用已启动的服务）
+
+**vs HOT 模式**（不适用于本 skill）:
+- 🔥 常驻内存，即时响应
+- ⚡ 无启动延迟
+- 🎯 适合高频率调用
+
+### 性能优化建议
+
+#### 对于 COLD 模式服务器（本 skill 使用的所有服务器）:
+
+1. **首次调用前执行健康检查**
+   ```typescript
+   const health = await airis-exec({ tool: "gateway-control:health" });
+   ```
+
+2. **预期并处理启动延迟**
+   ```typescript
+   // 首次调用可能需要等待
+   try {
+     const result = await airis-exec({
+       tool: "tavily:search",
+       arguments: { query: "..." }
+     });
+   } catch (error) {
+     if (error.message.includes("server not ready")) {
+       console.log("服务器正在启动，等待 3 秒后重试...");
+       await sleep(3000);
+       // 重试
+       const result = await airis-exec({
+         tool: "tavily:search",
+         arguments: { query: "..." }
+       });
+     }
+   }
+   ```
+
+3. **实现重试机制**（推荐）
+   ```typescript
+   async function execWithRetry(tool, arguments, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await airis-exec({ tool, arguments });
+       } catch (error) {
+         if (i === maxRetries - 1) throw error;
+         console.log(`重试 ${i + 1}/${maxRetries}...`);
+         await sleep(2000);
+       }
+     }
+   }
+   ```
+
+4. **批量操作时复用已启动的服务**
+   ```typescript
+   // ✅ 高效：复用已启动的 Tavily 服务
+   const topics = ["React", "Vue", "Angular"];
+   for (const topic of topics) {
+     await airis-exec({
+       tool: "tavily:search",
+       arguments: { query: topic }
+     });
+     // 后续调用无需启动延迟
+   }
+
+   // ❌ 低效：每次都可能触发启动
+   // （如果服务器在调用之间休眠）
+   ```
+
+### 服务可用性检查
+
+```typescript
+async function ensureServerAvailable(serverName: string) {
+  const servers = await airis-exec({
+    tool: "gateway-control:list-servers"
+  });
+
+  const server = servers.find(s => s.name === serverName);
+
+  if (!server) {
+    throw new Error(`服务器 ${serverName} 不存在或未安装`);
+  }
+
+  if (server.mode === "COLD" && !server.ready) {
+    console.log(`⏳ 等待 ${serverName} 启动（COLD 模式）...`);
+    await sleep(3000);
+
+    // 验证服务器是否已就绪
+    const updatedServers = await airis-exec({
+      tool: "gateway-control:list-servers"
+    });
+    const updatedServer = updatedServers.find(s => s.name === serverName);
+
+    if (!updatedServer.ready) {
+      throw new Error(`服务器 ${serverName} 启动失败`);
+    }
+  }
+
+  return server;
+}
+
+// 使用示例
+await ensureServerAvailable("tavily");
+await ensureServerAvailable("serena");
+```
+
+---
+
+## 🔄 统一错误处理
+
+### 错误分类体系
+
+本 skill 的错误可分为 4 大类：
+
+#### 1. 参数错误 → 使用 airis-schema 预验证
+
+**典型错误**:
+```
+Error: Invalid parameter 'filename'
+Error: Required parameter 'memory_file_name' is missing
+```
+
+**处理策略**:
+```typescript
+// ✅ 推荐：执行前验证
+const schema = await airis-schema({ tool: "serena:write_memory" });
+const requiredParams = schema.inputSchema.required;
+
+// 检查必需参数
+if (!arguments.memory_file_name) {
+  throw new Error(`缺少必需参数: memory_file_name`);
+}
+
+// 执行工具
+await airis-exec({
+  tool: "serena:write_memory",
+  arguments: { /* 验证后的参数 */ }
+});
+```
+
+**预防措施**:
+- 总是使用 `airis-schema` 查询正确的参数名
+- 参考本文档的"常见陷阱"章节
+- 使用 TypeScript 类型定义（如果可用）
+
+---
+
+#### 2. Gateway 错误 → 检查健康状态
+
+**典型错误**:
+```
+Error: Failed to connect to AIRIS MCP Gateway
+Error: Gateway timeout
+```
+
+**处理策略**:
+```typescript
+try {
+  const health = await airis-exec({
+    tool: "gateway-control:health"
+  });
+
+  if (!health.ok) {
+    throw new Error("Gateway 不健康");
+  }
+} catch (error) {
+  console.error("Gateway 错误:", error.message);
+
+  // 提供用户友好的错误信息
+  throw new Error(`
+    AIRIS MCP Gateway 不可用。请检查：
+    1. Gateway 是否正在运行（http://localhost:9400/health）
+    2. 网络连接是否正常
+    3. 防火墙设置是否阻止连接
+  `);
+}
+```
+
+**预防措施**:
+- 工作流开始前执行健康检查
+- 实现重试机制（最多 3 次，间隔 2 秒）
+- 提供清晰的错误提示和修复建议
+
+---
+
+#### 3. 工具执行错误 → 具体错误具体处理
+
+**典型错误**:
+```
+Error: Tavily API rate limit exceeded
+Error: Serena content too large
+Error: Fetch timeout
+```
+
+**处理策略**:
+
+**Tavily 速率限制**:
+```typescript
+try {
+  const result = await airis-exec({
+    tool: "tavily:search",
+    arguments: { query: "..." }
+  });
+} catch (error) {
+  if (error.message.includes("rate limit")) {
+    console.log("Tavily API 速率限制，等待 60 秒...");
+    await sleep(60000);
+    // 重试
+    return await airis-exec({
+      tool: "tavily:search",
+      arguments: { query: "..." }
+    });
+  }
+  throw error;
+}
+```
+
+**Serena 内容过大**:
+```typescript
+try {
+  await airis-exec({
+    tool: "serena:write_memory",
+    arguments: {
+      memory_file_name: "research.md",
+      content: largeContent
+    }
+  });
+} catch (error) {
+  if (error.message.includes("too large") || error.message.includes("exceeds maximum")) {
+    // 分段保存
+    const chunks = splitContent(largeContent, 50000);
+    for (const [i, chunk] of chunks.entries()) {
+      await airis-exec({
+        tool: "serena:write_memory",
+        arguments: {
+          memory_file_name: `research-part-${i + 1}.md`,
+          content: chunk
+        }
+      });
+    }
+  } else {
+    throw error;
+  }
+}
+```
+
+**Fetch 超时**:
+```typescript
+const timeout = 30000; // 30 秒
+
+try {
+  const result = await Promise.race([
+    airis-exec({
+      tool: "fetch:fetch",
+      arguments: { url: "..." }
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Fetch timeout")), timeout)
+    )
+  ]);
+} catch (error) {
+  if (error.message.includes("timeout")) {
+    console.log("Fetch 超时，尝试使用 Tavily Extract...");
+    // 回退方案
+    return await airis-exec({
+      tool: "tavily:extract",
+      arguments: { urls: ["..."] }
+    });
+  }
+  throw error;
+}
+```
+
+---
+
+#### 4. 服务不可用 → 重试或回退
+
+**典型错误**:
+```
+Error: Server 'tavily' not found
+Error: Server 'serena' not ready
+```
+
+**处理策略**:
+
+**服务器未安装**:
+```typescript
+const servers = await airis-exec({
+  tool: "gateway-control:list-servers"
+});
+
+const requiredServers = ["tavily", "fetch", "serena"];
+const missingServers = requiredServers.filter(
+  name => !servers.find(s => s.name === name)
+);
+
+if (missingServers.length > 0) {
+  throw new Error(`
+    缺少必需的 MCP 服务器: ${missingServers.join(", ")}
+
+    请安装缺少的服务器：
+    1. 检查 AIRIS MCP Gateway 配置
+    2. 安装缺少的 MCP 服务器
+    3. 重启 Gateway
+  `);
+}
+```
+
+**服务器未就绪（COLD 模式）**:
+```typescript
+async function waitForServerReady(serverName, maxWaitTime = 10000) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitTime) {
+    const servers = await airis-exec({
+      tool: "gateway-control:list-servers"
+    });
+
+    const server = servers.find(s => s.name === serverName);
+
+    if (server && server.ready) {
+      return true;
+    }
+
+    console.log(`⏳ 等待 ${serverName} 就绪...`);
+    await sleep(2000);
+  }
+
+  return false;
+}
+
+// 使用示例
+const ready = await waitForServerReady("tavily");
+if (!ready) {
+  throw new Error("Tavily 服务器启动超时");
+}
+```
+
+**回退方案**:
+```typescript
+// 主方案：使用 Tavily Extract
+try {
+  const content = await airis-exec({
+    tool: "tavily:extract",
+    arguments: { urls: [url] }
+  });
+} catch (error) {
+  console.log("Tavily Extract 失败，回退到 Fetch...");
+
+  // 回退方案：使用 Fetch
+  try {
+    const content = await airis-exec({
+      tool: "fetch:fetch",
+      arguments: { url: url }
+    });
+  } catch (fetchError) {
+    console.log("Fetch 也失败，提取内容不可用");
+    // 使用搜索结果的摘要内容
+    return searchResult.content;
+  }
+}
+```
+
+---
+
+### 完整错误处理示例
+
+```typescript
+async function robustWebResearch(topic: string) {
+  try {
+    // 1. 健康检查
+    const health = await airis-exec({
+      tool: "gateway-control:health"
+    });
+
+    if (!health.ok) {
+      throw new Error("GATEWAY_UNHEALTHY");
+    }
+
+    // 2. 验证服务器可用性
+    await ensureServerAvailable("tavily");
+    await ensureServerAvailable("serena");
+
+    // 3. 执行搜索（带重试）
+    const results = await execWithRetry(
+      "tavily:search",
+      {
+        query: `${topic} 2025`,
+        search_depth: "advanced",
+        max_results: 5
+      },
+      3
+    );
+
+    // 4. 保存结果（处理内容过大）
+    const content = formatResearchResults(results);
+
+    if (content.length > 50000) {
+      // 分段保存
+      const chunks = splitContent(content, 50000);
+      for (const [i, chunk] of chunks.entries()) {
+        await airis-exec({
+          tool: "serena:write_memory",
+          arguments: {
+            memory_file_name: `${topic}-part-${i + 1}.md`,
+            content: chunk
+          }
+        });
+      }
+    } else {
+      await airis-exec({
+        tool: "serena:write_memory",
+        arguments: {
+          memory_file_name: `${topic}.md`,
+          content: content
+        }
+      });
+    }
+
+    return results;
+
+  } catch (error) {
+    // 统一错误处理
+    console.error("Web 研究失败:", error);
+
+    if (error.message === "GATEWAY_UNHEALTHY") {
+      throw new Error("AIRIS MCP Gateway 不可用，请检查服务状态");
+    } else if (error.message.includes("rate limit")) {
+      throw new Error("API 速率限制，请稍后重试");
+    } else if (error.message.includes("not found")) {
+      throw new Error("必需的 MCP 服务器未安装");
+    } else {
+      throw new Error(`研究失败: ${error.message}`);
+    }
+  }
+}
+```
+
+---
+
 ## 📚 参考文档
 
 ### References 文件
