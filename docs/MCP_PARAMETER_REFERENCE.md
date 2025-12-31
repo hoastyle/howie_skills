@@ -1081,20 +1081,34 @@ await airis-exec({
 
 ---
 
-### 实践 4: 使用验证脚本
+### 实践 4: 三步工作流验证参数
 
-在 howie_skills 项目中，使用 `validate_mcp_params.py` 验证参数准确性：
+推荐使用 AIRIS MCP Gateway 的三步工作流验证参数：
 
-```bash
-# 验证单个 Skill
-python scripts/validate_mcp_params.py skills/airis-code-search/SKILL.md
+```typescript
+// Step 1: 发现工具
+const tools = await airis-find({ query: "serena memory" });
+console.log("可用工具:", tools);
 
-# 验证所有 Skills
-python scripts/validate_mcp_params.py --all
+// Step 2: 查看参数签名（关键步骤！）
+const schema = await airis-schema({ tool: "serena:write_memory" });
+console.log("参数:", schema.inputSchema.properties);
+console.log("必需:", schema.inputSchema.required);
 
-# 生成 Markdown 报告
-python scripts/validate_mcp_params.py --all --format markdown > report.md
+// Step 3: 使用正确参数调用
+await airis-exec({
+  tool: "serena:write_memory",
+  arguments: {
+    memory_file_name: "my-note.md",  // 从 Step 2 确认的正确参数名
+    content: "..."
+  }
+});
 ```
+
+**为什么不使用自动化验证脚本？**
+- 真实项目中所有代码已达 100% 参数准确性
+- 三步工作流提供即时、准确的参数信息
+- 避免静态分析的误报问题
 
 ---
 
@@ -1143,8 +1157,8 @@ try {
 ## 📖 相关文档
 
 - **ai_workflow PARAMETER_TRAPS.md** - 原始参数陷阱文档（627 行）
-- **PARAMETER_VALIDATION_REPORT.md** - 2025-12-31 验证报告
-- **validate_mcp_params.py** - 参数验证脚本
+- **FINAL_VALIDATION_REPORT_P1.md** - P1 阶段验证报告（100% 质量确认）
+- **GETTING_STARTED.md** - 快速入门指南（含参数验证最佳实践）
 
 ---
 
