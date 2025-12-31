@@ -47,31 +47,34 @@ description: UI 组件快速生成助手，使用 Magic MCP 生成 React/HTML �
 **⚠️ 关键陷阱：必须使用绝对路径**
 
 ```typescript
-// ❌ 错误：使用相对路径
+// ❌ 错误：使用相对路径且缺少必需参数
 await magic:generate_ui({
   description: "Create a modal component",
   path_to_current_file: "./components/Modal.tsx"  // 错误！
 });
 
-// ✅ 正确：使用绝对路径
+// ✅ 正确：使用绝对路径和所有必需参数
 await magic:generate_ui({
-  description: "Create a modal component",
-  absolutePathToCurrentFile: "/home/user/project/components/Modal.tsx"  // 正确！
+  absolutePathToCurrentFile: "/home/user/project/components/Modal.tsx",
+  content: "import React from 'react';\n\nexport const Modal = () => {\n  return <div></div>;\n};",
+  prompt: "Create a modal component"
 });
 ```
 
 **参数说明**:
-- `description` (必需) - 组件描述（自然语言）
 - `absolutePathToCurrentFile` (必需) - **绝对路径**到目标文件
-- `framework` - 框架类型（react | html，默认 react）
+- `content` (必需) - 当前文件内容
+- `prompt` (必需) - UI 生成提示（自然语言描述）
+- `framework` (可选) - 框架类型（react | html，默认 react）
 
 **生成示例**:
 ```typescript
 const uiComponent = await airis-exec({
   tool: "magic:generate_ui",
   arguments: {
-    description: "Create a modal dialog with close button and title",
     absolutePathToCurrentFile: "/home/user/project/src/components/Modal.tsx",
+    content: "import React from 'react';\n\nexport const Modal = () => {\n  return <div></div>;\n};",
+    prompt: "Create a modal dialog with close button and title",
     framework: "react"
   }
 });
@@ -148,8 +151,9 @@ const targetFile = `${currentPath}/src/components/Modal.tsx`;
 const modalComponent = await airis-exec({
   tool: "magic:generate_ui",
   arguments: {
-    description: "Create a Modal dialog component with title, close button, and content area. Use Tailwind CSS for styling.",
     absolutePathToCurrentFile: targetFile,
+    content: "import React from 'react';\n\nexport const Modal = () => {\n  return <div></div>;\n};",
+    prompt: "Create a Modal dialog component with title, close button, and content area. Use Tailwind CSS for styling.",
     framework: "react"
   }
 });
@@ -229,11 +233,12 @@ const tsLogo = tsLogos.logos[0].url;
 const techStackCard = await airis-exec({
   tool: "magic:generate_ui",
   arguments: {
-    description: `Create a TechStack card component displaying React and TypeScript logos.
+    absolutePathToCurrentFile: "/home/user/project/src/components/TechStack.tsx",
+    content: "import React from 'react';\n\nexport const TechStack = () => {\n  return <div></div>;\n};",
+    prompt: `Create a TechStack card component displaying React and TypeScript logos.
     React logo: ${reactLogo}
     TypeScript logo: ${tsLogo}
     Include tech name and description.`,
-    absolutePathToCurrentFile: "/home/user/project/src/components/TechStack.tsx",
     framework: "react"
   }
 });
@@ -363,9 +368,9 @@ const generateSchema = await airis-schema({
   tool: "magic:generate_ui"
 });
 console.log("必需参数:", generateSchema.inputSchema.required);
-// 输出: ["description", "absolutePathToCurrentFile"]
+// 输出: ["absolutePathToCurrentFile", "content", "prompt"]
 console.log("可选参数:", Object.keys(generateSchema.inputSchema.properties));
-// 输出: ["description", "absolutePathToCurrentFile", "framework"]
+// 输出: ["absolutePathToCurrentFile", "content", "prompt", "framework"]
 
 // 检查 search_logos 参数
 const searchSchema = await airis-schema({
@@ -469,8 +474,9 @@ async function standardizedUIGeneration(description: string, targetPath: string)
   const component = await airis-exec({
     tool: "magic:generate_ui",
     arguments: {
-      description: description,
       absolutePathToCurrentFile: targetPath,
+      content: "import React from 'react';\n\nexport const Component = () => {\n  return <div></div>;\n};",
+      prompt: description,
       framework: "react"
     }
   });
@@ -521,8 +527,9 @@ async function standardizedUIGeneration(description: string, targetPath: string)
      const result = await airis-exec({
        tool: "magic:generate_ui",
        arguments: {
-         description: "...",
-         absolutePathToCurrentFile: "..."
+         absolutePathToCurrentFile: "/home/user/project/Component.tsx",
+         content: "import React from 'react';\n\nexport const Component = () => <div />;",
+         prompt: "Create a component"
        }
      });
    } catch (error) {
@@ -533,8 +540,9 @@ async function standardizedUIGeneration(description: string, targetPath: string)
        const result = await airis-exec({
          tool: "magic:generate_ui",
          arguments: {
-           description: "...",
-           absolutePathToCurrentFile: "..."
+           absolutePathToCurrentFile: "/home/user/project/Component.tsx",
+           content: "import React from 'react';\n\nexport const Component = () => <div />;",
+           prompt: "Create a component"
          }
        });
      }
@@ -570,8 +578,9 @@ async function standardizedUIGeneration(description: string, targetPath: string)
      const result = await airis-exec({
        tool: "magic:generate_ui",
        arguments: {
-         description: comp.desc,
-         absolutePathToCurrentFile: `/project/src/${comp.name}.tsx`
+         absolutePathToCurrentFile: `/project/src/${comp.name}.tsx`,
+         content: `import React from 'react';\n\nexport const ${comp.name} = () => <div />;`,
+         prompt: comp.desc
        }
      });
      console.log(`${comp.name} 生成完成`);
@@ -648,12 +657,16 @@ const generateSchema = await airis-schema({
 const requiredParams = generateSchema.inputSchema.required;
 
 // 检查必需参数
-if (!arguments.description) {
-  throw new Error("缺少必需参数: description");
-}
-
 if (!arguments.absolutePathToCurrentFile) {
   throw new Error("缺少必需参数: absolutePathToCurrentFile");
+}
+
+if (!arguments.content) {
+  throw new Error("缺少必需参数: content");
+}
+
+if (!arguments.prompt) {
+  throw new Error("缺少必需参数: prompt");
 }
 
 // 检查路径是否为绝对路径
@@ -665,7 +678,7 @@ if (!path.isAbsolute(arguments.absolutePathToCurrentFile)) {
 // 执行工具
 await airis-exec({
   tool: "magic:generate_ui",
-  arguments: { /* 验证后的参数 */ }
+  arguments: arguments  // 验证后的参数
 });
 ```
 
@@ -742,8 +755,9 @@ try {
   const component = await airis-exec({
     tool: "magic:generate_ui",
     arguments: {
-      description: "vague description",
-      absolutePathToCurrentFile: "/project/Component.tsx"
+      absolutePathToCurrentFile: "/project/Component.tsx",
+      content: "import React from 'react';\n\nexport const Component = () => <div />;",
+      prompt: "vague description"
     }
   });
 } catch (error) {
@@ -772,8 +786,9 @@ try {
   const component = await airis-exec({
     tool: "magic:generate_ui",
     arguments: {
-      description: "...",
-      absolutePathToCurrentFile: "...",
+      absolutePathToCurrentFile: "/project/Component.tsx",
+      content: "import React from 'react';\n\nexport const Component = () => <div />;",
+      prompt: "Create a component",
       framework: "vue" // 不支持
     }
   });
@@ -896,8 +911,9 @@ try {
   const component = await airis-exec({
     tool: "magic:generate_ui",
     arguments: {
-      description: "Create a modal",
-      absolutePathToCurrentFile: "/project/Modal.tsx"
+      absolutePathToCurrentFile: "/project/Modal.tsx",
+      content: "import React from 'react';\n\nexport const Modal = () => <div />;",
+      prompt: "Create a modal"
     }
   });
 } catch (error) {
@@ -964,8 +980,9 @@ async function robustUIGeneration(description: string, targetPath: string) {
       component = await execWithRetry(
         "magic:generate_ui",
         {
-          description: description,
           absolutePathToCurrentFile: absolutePath,
+          content: "import React from 'react';\n\nexport const Component = () => <div />;",
+          prompt: description,
           framework: "react"
         },
         3
