@@ -148,9 +148,24 @@ Claude: [自动触发 airis-web-research skill]
 
 ## 📖 文档
 
+### 快速开始
+
+- **[快速入门指南](GETTING_STARTED.md)** - 5 分钟上手 AIRIS Skills
+- **[Gateway 验证指南](docs/GATEWAY_VERIFICATION.md)** - 验证 AIRIS MCP Gateway 部署
+- **[工作流组合示例](docs/WORKFLOW_EXAMPLES.md)** - 跨 Skill 协作的实战场景
+
+### 参考文档
+
+- [MCP 参数参考](docs/MCP_PARAMETER_REFERENCE.md) - 完整的 MCP 参数文档 (1,162 行)
+- [对齐度评估报告](docs/ALIGNMENT_ASSESSMENT_REPORT.md) - 与官方标准的对齐分析
+- [最终验证报告](docs/FINAL_VALIDATION_REPORT_P1.md) - P1 阶段质量验证
+
+### 开发指南
+
 - [命名规范](docs/naming-convention.md) - Skill 命名规则和约定
 - [集成指南](docs/integration-guide.md) - 安装和集成到项目
 - [开发指南](docs/development-guide.md) - 创建新 Skill 的指南
+- [Skill 模板](docs/SKILL_TEMPLATE.md) - 创建新 Skill 的模板
 - [变更日志](docs/changelog.md) - 版本历史和更新
 
 ---
@@ -192,6 +207,6 @@ Claude: [自动触发 airis-web-research skill]
 
 ---
 
-**最后更新**: 2025-12-30
+**最后更新**: 2025-12-31
 **版本**: 1.0.0 (Full Release) 🎉
 **维护者**: Hao
