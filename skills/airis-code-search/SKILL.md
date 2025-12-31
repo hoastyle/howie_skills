@@ -813,7 +813,7 @@ async function standardizedCodeSearch(repoPath: string, query: string) {
    try {
      await airis-exec({
        tool: "serena:find_symbol",
-       arguments: { name: "MyClass" }
+       arguments: { name_path_pattern: "MyClass" }
      });
    } catch (error) {
      if (error.message.includes("no active project") || error.message.includes("activate")) {
@@ -990,7 +990,7 @@ try {
 try {
   const symbols = await airis-exec({
     tool: "serena:find_symbol",
-    arguments: { name: "MyClass" }
+    arguments: { name_path_pattern: "MyClass" }
   });
 } catch (error) {
   if (error.message.includes("no active project") || error.message.includes("activate")) {
@@ -1042,7 +1042,7 @@ try {
 try {
   const symbols = await airis-exec({
     tool: "serena:find_symbol",
-    arguments: { name: "NonExistentClass" }
+    arguments: { name_path_pattern: "NonExistentClass" }
   });
 
   if (!symbols || symbols.length === 0) {

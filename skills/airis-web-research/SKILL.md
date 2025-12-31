@@ -750,7 +750,10 @@ if (!arguments.memory_file_name) {
 // 执行工具
 await airis-exec({
   tool: "serena:write_memory",
-  arguments: { /* 验证后的参数 */ }
+  arguments: {
+    memory_file_name: "research_result.md",
+    content: "# Research Result\n\n..."
+  }
 });
 ```
 

@@ -837,7 +837,10 @@ if (arguments.wait_until && !validWaitUntil.includes(arguments.wait_until)) {
 // 执行工具
 await airis-exec({
   tool: "playwright:browser_navigate",
-  arguments: { /* 验证后的参数 */ }
+  arguments: {
+    url: "https://example.com",
+    wait_until: "load"
+  }
 });
 ```
 
