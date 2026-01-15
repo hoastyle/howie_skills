@@ -1,13 +1,13 @@
 ---
 name: airis-knowledge-mgmt
-description: 知识图谱管理助手，使用 Memory MCP 创建实体和关系构建知识图谱，使用 Serena MCP 管理项目记忆文件。支持双路径知识管理：结构化知识图谱（实体-关系）和文档化项目记忆。适用于项目知识整理、概念关系梳理、会话记忆保存、技术文档管理等场景。
+description: 知识管理助手，整合 Mindbase（长期记忆）、Serena（项目记忆）和 Memory MCP（短期记忆）三层架构。支持结构化知识存储、语义搜索、会话管理和项目文档化。适用于跨项目知识库、对话历史持久化、会话管理等场景。
 ---
 
 # AIRIS Knowledge Management Helper
 
-**MCP 服务器**: memory, serena
+**MCP 服务器**: mindbase, serena, memory
 **复杂度**: medium
-**预估行数**: 260
+**预估行数**: 280
 
 ---
 
@@ -16,308 +16,464 @@ description: 知识图谱管理助手，使用 Memory MCP 创建实体和关系�
 ### 何时使用这个 Skill
 
 **主要场景**:
-- **知识图谱构建**: 创建概念、组件、人员、产品等实体及其关系
-- **项目知识整理**: 保存架构决策、技术选型、最佳实践到项目记忆
-- **概念关系梳理**: 理清复杂系统中的依赖关系、包含关系、实现关系
-- **会话记忆保存**: 保存重要对话内容、决策过程到长期记忆
-- **技术文档管理**: 系统化管理技术文档、学习笔记、研究报告
+- **长期知识库**: 保存跨项目的架构模式、最佳实践（Mindbase）
+- **对话历史**: 持久化 AI 对话历史，支持 PDCA 循环（Mindbase）
+- **会话管理**: 组织和管理多轮对话会话（Mindbase）
+- **项目记忆**: 保存项目级文档和架构决策（Serena）
+- **临时思考**: 当前会话的快速知识图谱构建（Memory MCP）
 
 **关键词触发**:
-- "创建知识图谱"、"建立关系"、"保存知识"
-- "记录到记忆"、"保存笔记"、"整理文档"
-- "创建实体"、"添加关系"、"查询知识"
-- "项目记忆"、"长期记忆"
+- "保存知识"、"长期记忆"、"跨项目知识"
+- "对话历史"、"会话管理"
+- "项目记忆"、"架构决策"
+- "知识图谱"、"实体关系"
 
 **典型用户请求**:
 ```
-"创建一个知识图谱，记录微服务架构中的各个组件及其依赖关系"
-"保存今天的架构决策讨论到项目记忆"
-"建立 React 和 Next.js 的关系，Next.js 是基于 React 的框架"
-"整理学习笔记，记录 TypeScript 的核心概念"
+"保存这个架构决策到知识库"
+"记录我们的对话历史以便后续参考"
+"创建一个会话来跟踪这个项目"
+"建立微服务组件的知识图谱"
 ```
 
 ---
 
-## 📋 双路径工作流
+## 📋 三层记忆架构
 
-### 路径选择决策
+### 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AIRIS Knowledge Architecture                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│  Short-term   │    │  Mid-term     │    │  Long-term    │
+│  Memory MCP   │    │  Serena       │    │  Mindbase     │
+│  (Session)    │    │  (Project)    │    │  (Persistent) │
+└───────────────┘    └───────────────┘    └───────────────┘
+        │                     │                     │
+    RAM/Disk              Filesystem           PostgreSQL
+   (JSON)                (Markdown)          + pgvector
+```
+
+### 路径选择决策树
 
 ```
 用户需求
     │
-    ├─ 需要结构化关系（实体-关系图谱）？
-    │   YES → 路径 1: Memory MCP (知识图谱)
+    ├─ 需要跨项目持久化？
+    │   YES → Mindbase (长期知识库)
     │
-    ├─ 需要文档化保存（长文本、笔记）？
-    │   YES → 路径 2: Serena MCP (项目记忆)
+    ├─ 需要项目级文档管理？
+    │   YES → Serena (项目记忆)
     │
-    └─ 两者都需要？
-        → 组合使用：Memory 存关系 + Serena 存详细文档
+    ├─ 需要对话历史或会话管理？
+    │   YES → Mindbase (Conversation/Session)
+    │
+    └─ 当前会话临时思考？
+        → Memory MCP (短期图谱)
 ```
+
+### 使用场景映射表
+
+| 场景 | 推荐方案 | 工具集 |
+|------|---------|--------|
+| **跨项目知识** | Mindbase | `memory_*` 工具 |
+| **对话历史** | Mindbase | `conversation_*` 工具 |
+| **会话管理** | Mindbase | `session_*` 工具 |
+| **项目文档** | Serena | `write_memory`, `read_memory` |
+| **临时图谱** | Memory MCP | `create_entities`, `create_relations` |
 
 ---
 
-## 📋 路径 1: 知识图谱（Memory MCP）
+## 📋 Mindbase - 长期记忆（推荐）
 
-### Phase 1: 创建实体
+### 核心功能
 
-**功能**: 创建知识图谱中的实体（概念、组件、人员等）
+Mindbase 提供三个核心能力：
+1. **Memory 管理** - 跨项目知识库
+2. **Conversation 管理** - AI 对话历史
+3. **Session 管理** - 会话组织和上下文
 
-**⚠️ 关键陷阱：observations 字段必需**
+### Memory 工具（5 个）
 
+#### 1. memory_write
+
+**功能**: 保存知识到 Markdown 文件和 PostgreSQL 数据库
+
+**参数**:
 ```typescript
-// ❌ 错误：缺少 observations
-await airis-exec({
-  tool: "memory:create_entities",
-  arguments: {
-    entities: [
-      {
-        name: "React",
-        entityType: "Framework"
-      }
-    ]
-  }
-});
-// Error: 'observations' is required
-
-// ✅ 正确：包含 observations
-await airis-exec({
-  tool: "memory:create_entities",
-  arguments: {
-    entities: [
-      {
-        name: "React",
-        entityType: "Framework",
-        observations: [
-          "React 是一个用于构建用户界面的 JavaScript 库",
-          "由 Facebook 开发和维护",
-          "使用虚拟 DOM 提升性能"
-        ]
-      }
-    ]
-  }
-});
-```
-
-**参数说明**:
-- `entities` (必需) - 实体数组
-  - `name` (必需) - 实体名称（唯一标识）
-  - `entityType` (必需) - 实体类型（Concept, Component, Person, Product 等）
-  - `observations` (必需) - 观察/描述数组（至少 1 个）
-
-**支持的实体类型**:
-- `Concept` - 抽象概念（如"微服务架构"、"RESTful API"）
-- `Component` - 系统组件（如"UserService"、"AuthModule"）
-- `Person` - 人员（如"项目负责人"、"开发者"）
-- `Product` - 产品/工具（如"React"、"TypeScript"）
-- `Document` - 文档（如"架构设计文档"、"API 规范"）
-
-**批量创建示例**:
-```typescript
-await airis-exec({
-  tool: "memory:create_entities",
-  arguments: {
-    entities: [
-      {
-        name: "UserService",
-        entityType: "Component",
-        observations: [
-          "负责用户认证和授权",
-          "提供 REST API 接口",
-          "使用 JWT 进行会话管理"
-        ]
-      },
-      {
-        name: "Database",
-        entityType: "Component",
-        observations: [
-          "PostgreSQL 数据库",
-          "存储用户信息和会话数据"
-        ]
-      }
-    ]
-  }
-});
-```
-
----
-
-### Phase 2: 创建关系
-
-**功能**: 建立实体之间的关系
-
-**执行创建**:
-```typescript
-await airis-exec({
-  tool: "memory:create_relations",
-  arguments: {
-    relations: [
-      {
-        from: "UserService",
-        to: "Database",
-        relationType: "dependsOn"
-      },
-      {
-        from: "Next.js",
-        to: "React",
-        relationType: "uses"
-      }
-    ]
-  }
-});
-```
-
-**参数说明**:
-- `relations` (必需) - 关系数组
-  - `from` (必需) - 源实体名称
-  - `to` (必需) - 目标实体名称
-  - `relationType` (必需) - 关系类型
-
-**支持的关系类型**:
-- `dependsOn` - 依赖关系（A 依赖 B）
-- `uses` - 使用关系（A 使用 B）
-- `includes` - 包含关系（A 包含 B）
-- `implements` - 实现关系（A 实现 B）
-- `extends` - 继承关系（A 继承 B）
-- `relatedTo` - 相关关系（A 与 B 相关）
-
----
-
-### Phase 3: 查询知识图谱
-
-**功能**: 搜索和浏览知识图谱
-
-**搜索节点**:
-```typescript
-const searchResult = await airis-exec({
-  tool: "memory:search_nodes",
-  arguments: {
-    query: "UserService",
-    limit: 10
-  }
-});
-```
-
-**返回结果**:
-```json
 {
-  "nodes": [
-    {
-      "name": "UserService",
-      "entityType": "Component",
-      "observations": [...],
-      "relations": [
-        {"to": "Database", "type": "dependsOn"}
-      ]
-    }
-  ]
+  name: string;              // 必需：记忆名称（成为文件名）
+  content: string;           // 必需：Markdown 内容
+  category?: 'architecture' | 'decision' | 'pattern' | 'guide' | 'onboarding' | 'note';
+  project?: string;          // 项目标识符
+  tags?: string[];           // 标签数组
+}
+```
+
+**示例**:
+```typescript
+await airis-exec({
+  tool: "mindbase:memory_write",
+  arguments: {
+    name: "microservices-pattern-2025-01-15",
+    content: `# 微服务架构模式
+
+## 核心原则
+- 服务独立性
+- 去中心化数据管理
+- API 网关统一入口`,
+    category: "pattern",
+    project: "shared-knowledge",
+    tags: ["microservices", "architecture"]
+  }
+});
+```
+
+#### 2. memory_search
+
+**功能**: 语义搜索记忆（使用 pgvector 向量相似度）
+
+**参数**:
+```typescript
+{
+  query: string;             // 必需：搜索查询
+  threshold?: number;        // 相似度阈值 0-1（默认 0.7）
+  limit?: number;            // 最大结果数（默认 10）
+  category?: string;         // 按类别过滤
+  project?: string;          // 按项目过滤
+}
+```
+
+**示例**:
+```typescript
+const results = await airis-exec({
+  tool: "mindbase:memory_search",
+  arguments: {
+    query: "微服务架构设计模式",
+    threshold: 0.6,
+    limit: 5,
+    category: "pattern"
+  }
+});
+// 返回按相似度排序的记忆列表
+```
+
+#### 3. memory_read
+
+**功能**: 读取指定记忆
+
+**参数**:
+```typescript
+{
+  name: string;              // 必需：记忆名称
+  project?: string;          // 项目标识符（可选）
+}
+```
+
+#### 4. memory_list
+
+**功能**: 列出所有记忆（支持过滤）
+
+**参数**:
+```typescript
+{
+  category?: string;         // 按类别过滤
+  project?: string;          // 按项目过滤
+  tags?: string[];           // 按标签过滤
+}
+```
+
+#### 5. memory_delete
+
+**功能**: 删除记忆（同时删除 Markdown 文件和数据库记录）
+
+**参数**:
+```typescript
+{
+  name: string;              // 必需：记忆名称
+  project?: string;          // 项目标识符（可选）
 }
 ```
 
 ---
 
-## 📋 路径 2: 项目记忆（Serena MCP）
+### Conversation 工具（4 个）
 
-### Phase 1: 写入记忆
+#### 1. conversation_save
 
-**功能**: 保存文档化的项目知识
+**功能**: 保存 AI 对话历史（自动生成向量用于语义搜索）
 
-**⚠️ 关键陷阱：参数名称是 memory_file_name**
+**参数**:
+```typescript
+{
+  source: 'claude-code' | 'claude-desktop' | 'chatgpt' | 'cursor' | 'windsurf';
+  title: string;             // 必需：对话标题或摘要
+  content: object;           // 必需：对话内容（messages, context 等）
+  category?: 'task' | 'decision' | 'progress' | 'note' | 'warning' | 'error';
+  priority?: 'critical' | 'high' | 'normal' | 'low';
+  sessionId?: string;        // 关联会话 ID
+  channel?: string;          // 频道或工作区
+  metadata?: object;         // 额外元数据
+}
+```
+
+**示例**:
+```typescript
+await airis-exec({
+  tool: "mindbase:conversation_save",
+  arguments: {
+    source: "claude-code",
+    title: "实现用户认证功能",
+    content: {
+      messages: [
+        { role: "user", content: "实现 JWT 认证" },
+        { role: "assistant", content: "需要安装 jsonwebtoken..." }
+      ],
+      context: "添加登录和注册功能"
+    },
+    category: "task",
+    priority: "high",
+    metadata: {
+      project: "my-app",
+      tags: ["auth", "jwt"]
+    }
+  }
+});
+```
+
+#### 2. conversation_search
+
+**功能**: 语义搜索对话历史
+
+**参数**:
+```typescript
+{
+  query: string;             // 必需：搜索查询
+  source?: string;           // 按来源平台过滤
+  threshold?: number;        // 相似度阈值（默认 0.7）
+  limit?: number;            // 最大结果数（默认 10）
+}
+```
+
+#### 3. conversation_get
+
+**功能**: 获取对话（支持详细过滤和分页）
+
+**参数**:
+```typescript
+{
+  id?: string;               // 获取特定对话
+  sessionId?: string;        // 按会话过滤
+  category?: string;         // 按类别过滤
+  priority?: string;         // 按优先级过滤
+  source?: string;           // 按来源过滤
+  createdBefore?: string;    // ISO 8601 日期
+  createdAfter?: string;     // ISO 8601 日期
+  limit?: number;            // 最大结果数（默认 100）
+  offset?: number;           // 分页偏移（默认 0）
+}
+```
+
+#### 4. conversation_delete
+
+**功能**: 删除对话
+
+**参数**:
+```typescript
+{
+  id: string;                // 必需：对话 ID
+}
+```
+
+---
+
+### Session 工具（4 个）
+
+#### 1. session_create
+
+**功能**: 创建新会话（用于组织对话）
+
+**参数**:
+```typescript
+{
+  name: string;              // 必需：会话名称
+  description?: string;      // 会话描述
+  parentId?: string;         // 父会话 ID（创建层级会话）
+}
+```
+
+**示例**:
+```typescript
+const session = await airis-exec({
+  tool: "mindbase:session_create",
+  arguments: {
+    name: "project-x-sprint-1",
+    description: "Sprint 1: 用户认证和授权功能开发",
+    parentId: "project-x-main"  // 创建子会话
+  }
+});
+```
+
+#### 2. session_start
+
+**功能**: 启动或恢复会话（设置为当前上下文）
+
+**参数**:
+```typescript
+{
+  sessionId?: string;        // 现有会话 ID（恢复）
+  name?: string;             // 新会话名称（创建新会话）
+  description?: string;      // 新会话描述
+}
+```
+
+#### 3. session_list
+
+**功能**: 列出最近的会话
+
+**参数**:
+```typescript
+{
+  limit?: number;            // 最大结果数（默认 10）
+}
+```
+
+#### 4. session_delete
+
+**功能**: 删除会话（对话将保留但变为孤立）
+
+**参数**:
+```typescript
+{
+  id: string;                // 必需：会话 ID
+}
+```
+
+---
+
+## 📋 Serena - 项目记忆
+
+### 核心功能
+
+Serena 提供项目级文档化记忆管理，保存到 `.serena/memories/` 目录。
+
+### 工具列表
+
+#### 1. write_memory
+
+**⚠️ 关键陷阱：参数名称是 `memory_file_name`**
 
 ```typescript
-// ❌ 错误：使用 filename
+// ❌ 错误
 await airis-exec({
   tool: "serena:write_memory",
   arguments: {
-    filename: "architecture-decision.md",  // 错误参数名
+    filename: "doc.md",      // 错误参数名
     content: "..."
   }
 });
 
-// ✅ 正确：使用 memory_file_name
+// ✅ 正确
 await airis-exec({
   tool: "serena:write_memory",
   arguments: {
-    memory_file_name: "architecture-decision.md",  // 正确参数名
-    content: `# 架构决策记录
-
-## 背景
-我们需要选择前端框架...
+    memory_file_name: "architecture-decision-2025-01-15.md",  // 正确
+    content: `# 架构决策
 
 ## 决策
-选择 Next.js 作为主要框架
+选择 Next.js 作为前端框架
 
 ## 理由
-1. 服务端渲染支持
-2. 优秀的开发体验
-3. 强大的社区生态
+1. 服务端渲染优化 SEO
+2. 强大的生态系统
 
 ---
-**日期**: ${new Date().toISOString().split('T')[0]}
-`
+**日期**: 2025-01-15`
   }
 });
 ```
 
-**参数说明**:
-- `memory_file_name` (必需) - 记忆文件名（会保存到 `.serena/memories/` 目录）
-- `content` (必需) - Markdown 格式的内容
+**参数**:
+- `memory_file_name` (必需) - 记忆文件名
+- `content` (必需) - Markdown 内容
 
-**记忆文件命名规范**:
-- 使用语义化名称：`topic-subtopic-date.md`
-- 使用小写字母和连字符
-- 添加日期后缀便于追踪
-- 示例：
-  - `architecture-decision-2025-12-30.md`
-  - `react-hooks-learning-notes.md`
-  - `api-design-best-practices.md`
+#### 2. read_memory
 
----
+**功能**: 读取记忆文件
 
-### Phase 2: 列出记忆
-
-**功能**: 查看所有已保存的记忆文件
-
+**参数**:
 ```typescript
-const memoryList = await airis-exec({
-  tool: "serena:list_memories",
-  arguments: {}
-});
+{
+  memory_file_name: string;  // 必需：文件名
+}
 ```
 
-**返回结果**:
-```json
+#### 3. list_memories
+
+**功能**: 列出所有记忆文件
+
+**参数**: 无
+
+#### 4. delete_memory
+
+**功能**: 删除记忆文件
+
+**参数**:
+```typescript
 {
-  "memories": [
-    {
-      "name": "architecture-decision.md",
-      "path": ".serena/memories/architecture-decision.md",
-      "size": 1024,
-      "modified": "2025-12-30T10:30:00Z"
-    }
-  ]
+  memory_file_name: string;  // 必需：文件名
 }
 ```
 
 ---
 
-### Phase 3: 读取记忆
+## 📋 Memory MCP - 短期记忆（可选）
 
-**功能**: 读取特定的记忆文件内容
+### 核心功能
+
+Memory MCP 提供会话级临时记忆，用于快速构建实体-关系图谱。
+
+**注意**: Memory MCP 工具可能在某些配置中不可用，使用前请通过 `airis-find` 验证。
+
+### 预期工具（需验证）
 
 ```typescript
-const memoryContent = await airis-exec({
-  tool: "serena:read_memory",
-  arguments: {
-    memory_file_name: "architecture-decision.md"
-  }
-});
+// 知识图谱操作
+memory:create_entities     // 创建实体
+memory:create_relations     // 创建关系
+memory:search_nodes        // 搜索节点
+memory:get_entity          // 获取实体详情
 ```
 
-**返回结果**:
-```json
-{
-  "content": "# 架构决策记录\n\n..."
+### 使用示例
+
+```typescript
+// 验证工具可用性
+const memoryTools = await airis-find({ query: "memory" });
+
+if (memoryTools.some(t => t.name === "memory:create_entities")) {
+  // 创建实体
+  await airis-exec({
+    tool: "memory:create_entities",
+    arguments: {
+      entities: [
+        {
+          name: "UserService",
+          entityType: "Component",
+          observations: [
+            "负责用户认证和授权",
+            "提供 REST API 接口"
+          ]
+        }
+      ]
+    }
+  });
 }
 ```
 
@@ -325,983 +481,295 @@ const memoryContent = await airis-exec({
 
 ## 💻 完整示例
 
-### 示例 1: 构建微服务知识图谱
+### 示例 1: 跨项目知识库管理
 
-**用户需求**:
-```
-"创建一个知识图谱，记录我们微服务架构中的 3 个核心服务及其依赖"
-```
-
-**执行步骤**:
+**场景**: 保存可复用的架构模式到知识库
 
 ```typescript
-// Step 1: 创建服务实体
+// 1. 保存到 Mindbase（跨项目知识库）
 await airis-exec({
-  tool: "memory:create_entities",
+  tool: "mindbase:memory_write",
   arguments: {
-    entities: [
-      {
-        name: "UserService",
-        entityType: "Component",
-        observations: [
-          "用户认证和授权服务",
-          "提供 JWT 令牌生成",
-          "端口: 3001"
-        ]
-      },
-      {
-        name: "OrderService",
-        entityType: "Component",
-        observations: [
-          "订单管理服务",
-          "处理订单创建、查询、更新",
-          "端口: 3002"
-        ]
-      },
-      {
-        name: "PaymentService",
-        entityType: "Component",
-        observations: [
-          "支付处理服务",
-          "集成第三方支付网关",
-          "端口: 3003"
-        ]
-      },
-      {
-        name: "PostgreSQL",
-        entityType: "Component",
-        observations: [
-          "共享数据库",
-          "存储用户、订单、支付数据"
-        ]
-      },
-      {
-        name: "Redis",
-        entityType: "Component",
-        observations: [
-          "缓存服务",
-          "存储会话和临时数据"
-        ]
-      }
-    ]
+    name: "circuit-breaker-pattern-2025-01-15",
+    content: `# 熔断器模式
+
+## 描述
+防止级联故障的弹性模式
+
+## 实现
+- 状态机：Closed → Open → Half-Open
+- 超时设置
+- 降级策略
+
+## 最佳实践
+1. 设置合理的超时时间
+2. 实现降级逻辑
+3. 监控和告警`,
+    category: "pattern",
+    project: "shared-knowledge",  // 跨项目共享
+    tags: ["resilience", "microservices", "patterns"]
   }
 });
 
-// Step 2: 创建依赖关系
-await airis-exec({
-  tool: "memory:create_relations",
+// 2. 语义搜索相关模式
+const patterns = await airis-exec({
+  tool: "mindbase:memory_search",
   arguments: {
-    relations: [
-      {
-        from: "UserService",
-        to: "PostgreSQL",
-        relationType: "dependsOn"
-      },
-      {
-        from: "UserService",
-        to: "Redis",
-        relationType: "uses"
-      },
-      {
-        from: "OrderService",
-        to: "PostgreSQL",
-        relationType: "dependsOn"
-      },
-      {
-        from: "OrderService",
-        to: "UserService",
-        relationType: "dependsOn"
-      },
-      {
-        from: "PaymentService",
-        to: "PostgreSQL",
-        relationType: "dependsOn"
-      },
-      {
-        from: "PaymentService",
-        to: "OrderService",
-        relationType: "dependsOn"
-      }
-    ]
+    query: "弹性模式 容错",
+    category: "pattern",
+    threshold: 0.6,
+    limit: 5
   }
 });
 
-// Step 3: 验证知识图谱
-const graphCheck = await airis-exec({
-  tool: "memory:search_nodes",
+console.log(`找到 ${patterns.length} 个相关模式`);
+```
+
+### 示例 2: 对话历史和会话管理
+
+**场景**: 追踪项目开发的完整对话历史
+
+```typescript
+// 1. 创建项目会话
+const session = await airis-exec({
+  tool: "mindbase:session_create",
   arguments: {
-    query: "Service",
+    name: "ecommerce-auth-implementation",
+    description: "电商项目认证功能实现"
+  }
+});
+
+console.log("会话 ID:", session.id);
+
+// 2. 保存对话历史
+await airis-exec({
+  tool: "mindbase:conversation_save",
+  arguments: {
+    source: "claude-code",
+    title: "实现 OAuth2 登录",
+    content: {
+      messages: [
+        { role: "user", content: "如何实现 Google OAuth2 登录？" },
+        { role: "assistant", content: "使用 passport-google-oauth20..." }
+      ],
+      context: "添加社交登录功能"
+    },
+    category: "task",
+    priority: "high",
+    sessionId: session.id,  // 关联到会话
+    metadata: {
+      project: "ecommerce",
+      feature: "authentication"
+    }
+  }
+});
+
+// 3. 搜索相关对话
+const conversations = await airis-exec({
+  tool: "mindbase:conversation_search",
+  arguments: {
+    query: "OAuth 认证实现",
+    sessionId: session.id,
     limit: 10
   }
 });
-
-console.log(`✅ 创建了 ${graphCheck.nodes.length} 个服务节点`);
 ```
 
-**预期输出**:
-```
-✅ 知识图谱创建完成
-- 5 个实体：3 个服务 + 2 个基础设施
-- 6 个关系：依赖链清晰
-```
+### 示例 3: 项目文档管理
 
----
-
-### 示例 2: 组合使用 Memory + Serena
-
-**用户需求**:
-```
-"记录今天的技术选型讨论，包括概念关系和详细文档"
-```
-
-**执行步骤**:
+**场景**: 保存项目级架构决策
 
 ```typescript
-// Step 1: 使用 Memory 创建技术栈实体和关系
-await airis-exec({
-  tool: "memory:create_entities",
-  arguments: {
-    entities: [
-      {
-        name: "Next.js",
-        entityType: "Product",
-        observations: ["React 框架", "SSR 支持", "v14"]
-      },
-      {
-        name: "TypeScript",
-        entityType: "Product",
-        observations: ["类型安全", "v5.0"]
-      },
-      {
-        name: "Tailwind CSS",
-        entityType: "Product",
-        observations: ["实用优先 CSS", "v3.4"]
-      }
-    ]
-  }
-});
-
-await airis-exec({
-  tool: "memory:create_relations",
-  arguments: {
-    relations: [
-      { from: "Next.js", to: "React", relationType: "uses" },
-      { from: "Next.js", to: "TypeScript", relationType: "uses" },
-      { from: "Next.js", to: "Tailwind CSS", relationType: "uses" }
-    ]
-  }
-});
-
-// Step 2: 使用 Serena 保存详细决策文档
+// 保存到 Serena（项目记忆）
 await airis-exec({
   tool: "serena:write_memory",
   arguments: {
-    memory_file_name: "tech-stack-decision-2025-12-30.md",
-    content: `# 技术栈选型决策
+    memory_file_name: "adr-001-database-selection-2025-01-15.md",
+    content: `# ADR 001: 数据库选型
+
+## 状态
+已接受
 
 ## 背景
-为新项目选择前端技术栈
+需要为新项目选择主数据库
 
 ## 决策
-- **框架**: Next.js 14
-- **语言**: TypeScript 5.0
-- **样式**: Tailwind CSS 3.4
+选择 PostgreSQL 15 作为主数据库
 
 ## 理由
+1. ACID 事务支持
+2. 丰富的数据类型（JSON, UUID）
+3. pgvector 扩展支持向量搜索
+4. 强大的生态系统
 
-### Next.js
-- 服务端渲染（SEO 优化）
-- App Router（最新路由系统）
-- 优秀的开发体验
-
-### TypeScript
-- 类型安全
-- 更好的 IDE 支持
-- 减少运行时错误
-
-### Tailwind CSS
-- 快速原型开发
-- 一致的设计系统
-- 优秀的性能
-
-## 依赖关系
-\`\`\`
-Next.js
-  ├─ uses → React
-  ├─ uses → TypeScript
-  └─ uses → Tailwind CSS
-\`\`\`
-
-## 参考资料
-- [Next.js 官方文档](https://nextjs.org)
-- [TypeScript 手册](https://www.typescriptlang.org)
-- [Tailwind CSS 文档](https://tailwindcss.com)
+## 后果
+- 使用 TypeScript + Prisma ORM
+- 采用迁移管理数据库版本
+- 定期备份策略
 
 ---
-**决策日期**: 2025-12-30
-**参与人员**: 架构团队
-**状态**: 已批准
-`
+**决策日期**: 2025-01-15
+**决策者**: 架构团队`
   }
 });
 ```
 
-**预期输出**:
-```
-✅ 知识管理完成
-- Memory: 创建了 3 个技术栈实体和 3 个关系
-- Serena: 保存了详细决策文档到 tech-stack-decision-2025-12-30.md
+### 示例 4: 组合使用三层架构
+
+**场景**: 完整的知识管理流程
+
+```typescript
+// Step 1: 当前会话快速思考（Memory MCP）
+if (hasMemoryTools) {
+  await airis-exec({
+    tool: "memory:create_entities",
+    arguments: {
+      entities: [
+        { name: "AuthModule", entityType: "Component", observations: ["认证模块"] },
+        { name: "JWT", entityType: "Concept", observations: ["JSON Web Token"] }
+      ]
+    }
+  });
+}
+
+// Step 2: 保存到项目记忆（Serena）
+await airis-exec({
+  tool: "serena:write_memory",
+  arguments: {
+    memory_file_name: "auth-module-design.md",
+    content: generateAuthDesignDoc()
+  }
+});
+
+// Step 3: 同步到长期知识库（Mindbase）
+await airis-exec({
+  tool: "mindbase:memory_write",
+  arguments: {
+    name: "jwt-authentication-pattern",
+    content: generateAuthPatternDoc(),
+    category: "pattern",
+    project: "shared-knowledge"
+  }
+});
+
+// Step 4: 记录对话历史（Mindbase）
+await airis-exec({
+  tool: "mindbase:conversation_save",
+  arguments: {
+    source: "claude-code",
+    title: "设计认证模块架构",
+    content: { messages: conversationHistory },
+    category: "decision"
+  }
+});
 ```
 
 ---
 
 ## ⚠️ 常见陷阱和解决方案
 
-### 陷阱 1: Memory 实体缺少 observations
+### 陷阱 1: 参数名称错误
 
-**错误现象**:
-```
-Error: 'observations' is required for each entity
-```
-
-**原因分析**:
-Memory MCP 要求每个实体必须有至少 1 个 observation（观察/描述）
-
-**解决方案**:
-```typescript
-// ❌ 错误：缺少 observations
-{
-  name: "React",
-  entityType: "Framework"
-}
-
-// ✅ 正确：包含 observations
-{
-  name: "React",
-  entityType: "Framework",
-  observations: [
-    "JavaScript UI 库",
-    "由 Facebook 维护"
-  ]
-}
-```
-
----
-
-### 陷阱 2: Serena 参数名称错误
-
-**错误现象**:
-```
-Error: Unknown parameter 'filename'
-```
-
-**原因分析**:
-Serena MCP 使用 `memory_file_name` 而非标准的 `filename`
-
-**解决方案**:
+**Serena 使用 `memory_file_name` 而非 `filename`**
 ```typescript
 // ❌ 错误
-{ filename: "notes.md" }
+{ filename: "doc.md" }
 
 // ✅ 正确
-{ memory_file_name: "notes.md" }
+{ memory_file_name: "doc.md" }
 ```
 
----
+### 陷阱 2: Mindbase vs Memory MCP 混淆
 
-### 陷阱 3: 关系类型不明确
-
-**错误现象**:
-创建的关系无法准确表达实体间的关系
-
-**原因分析**:
-使用了过于宽泛的关系类型（如 `relatedTo`），无法清晰表达具体关系
-
-**解决方案**:
 ```typescript
-// ❌ 不推荐：关系不明确
-{
-  from: "UserService",
-  to: "Database",
-  relationType: "relatedTo"  // 太宽泛
-}
+// ❌ 错误：使用不存在的 Memory MCP 工具
+await airis-exec({ tool: "memory:create_entities" });
 
-// ✅ 推荐：明确的关系
-{
-  from: "UserService",
-  to: "Database",
-  relationType: "dependsOn"  // 清晰的依赖关系
-}
+// ✅ 正确：使用 Mindbase 工具
+await airis-exec({ tool: "mindbase:memory_write" });
+```
 
-// 选择合适的关系类型：
-// - dependsOn: 强依赖（A 无 B 无法运行）
-// - uses: 使用关系（A 调用 B 的功能）
-// - includes: 包含关系（A 是 B 的容器）
-// - implements: 实现关系（A 实现了 B 的接口）
-// - extends: 继承关系（A 继承 B）
+### 陷阱 3: 工具可用性未验证
+
+**解决方案**: 使用前始终验证
+```typescript
+// 1. 发现工具
+const tools = await airis-find({ query: "mindbase" });
+
+// 2. 检查工具是否存在
+if (tools.some(t => t.name === "mindbase:memory_write")) {
+  // 3. 验证参数
+  const schema = await airis-schema({ tool: "mindbase:memory_write" });
+
+  // 4. 执行操作
+  await airis-exec({
+    tool: "mindbase:memory_write",
+    arguments: { name: "...", content: "..." }
+  });
+}
 ```
 
 ---
 
-## 🔌 AIRIS MCP Gateway 标准访问模式（完整版）
-
-本章节展示完整的 AIRIS MCP Gateway 访问模式，确保工具使用的标准化和可靠性。
+## 🔌 AIRIS MCP Gateway 标准访问模式
 
 ### 四步标准化工作流
 
-#### Step 1: 工具发现 (airis-find)
-
-使用 `airis-find` 发现 Memory 和 Serena 提供的工具：
-
 ```typescript
-// 发现 Memory 工具（知识图谱）
-const memoryTools = await airis-find({
-  query: "memory"
-});
-console.log("Memory 工具:", memoryTools.map(t => t.name));
-// 输出: ["memory:create_entities", "memory:create_relations", "memory:search_nodes", ...]
+// Step 1: 工具发现
+const mindbaseTools = await airis-find({ query: "mindbase" });
+const serenaTools = await airis-find({ query: "serena" });
 
-// 发现 Serena 工具（项目记忆）
-const serenaTools = await airis-find({
-  query: "serena memory"
-});
-console.log("Serena 记忆工具:", serenaTools.map(t => t.name));
-// 输出: ["serena:write_memory", "serena:read_memory", "serena:list_memories", ...]
-```
+// Step 2: 参数验证
+const schema = await airis-schema({ tool: "mindbase:memory_write" });
 
-**为什么需要这一步？**
-- 发现 Memory 和 Serena 的可用工具
-- 确认工具名称拼写正确
-- 根据需求选择合适的 MCP 服务器
-
----
-
-#### Step 2: 参数验证 (airis-schema)
-
-在执行前，使用 `airis-schema` 检查工具的参数要求：
-
-```typescript
-// 检查 Memory create_entities 参数
-const createEntitiesSchema = await airis-schema({
-  tool: "memory:create_entities"
-});
-console.log("必需参数:", createEntitiesSchema.inputSchema.required);
-// 输出: ["entities"]
-// 注意：entities 数组中的每个对象必须包含 observations
-
-// 检查 Serena write_memory 参数
-const writeMemorySchema = await airis-schema({
-  tool: "serena:write_memory"
-});
-console.log("Serena 参数:", writeMemorySchema.inputSchema.required);
-// 输出: ["memory_file_name", "content"]
-```
-
-**常见参数命名陷阱**（本 skill 涉及）:
-- ⚠️ Memory: `entities` 数组中每个实体必须包含 `observations` 字段
-- ⚠️ Serena: 参数名是 `memory_file_name`（不是 `filename`）
-- ⚠️ Memory: `entityType` 必须是标准类型（Concept, Component, Person, Product, Document）
-- ⚠️ Memory: `relationType` 必须是标准类型（depends-on, part-of, related-to, uses, includes, implements）
-
-通过 `airis-schema` 可以避免 90% 的参数错误！
-
----
-
-#### Step 3: 执行工具 (airis-exec)
-
-验证参数后，使用 `airis-exec` 执行工具（已在上面的工作流程中详细说明）。
-
----
-
-#### Step 4: 健康检查 (gateway-control)
-
-在执行工具前，检查 AIRIS MCP Gateway 状态：
-
-```typescript
-// 检查 Gateway 健康状态
-const health = await airis-exec({
-  tool: "gateway-control:health"
-});
-
-if (!health.ok) {
-  throw new Error("AIRIS MCP Gateway 不可用，请检查 Gateway 是否正在运行");
-}
-
-// 列出可用的 MCP 服务器
-const servers = await airis-exec({
-  tool: "gateway-control:list-servers"
-});
-
-// 验证 Memory 和 Serena 已安装
-const requiredServers = ["memory", "serena"];
-for (const serverName of requiredServers) {
-  const server = servers.find(s => s.name === serverName);
-
-  if (!server) {
-    throw new Error(`服务器 ${serverName} 未安装`);
-  }
-
-  if (server.mode === "HOT" && server.ready) {
-    console.log(`✅ ${serverName} 已就绪（HOT 模式）`);
-  } else if (server.mode === "COLD") {
-    if (!server.ready) {
-      console.log(`⏳ 等待 ${serverName} 启动（COLD 模式）...`);
-      await sleep(3000);
-    }
-    console.log(`✅ ${serverName} 已就绪（COLD 模式）`);
-  }
-}
-```
-
-**什么时候需要健康检查？**
-- ✅ 首次使用 Memory 或 Serena
-- ✅ 批量创建实体和关系
-- ✅ 生产环境部署
-- ⚠️ 单次快速操作时可以跳过（但要处理错误）
-
----
-
-### 完整示例：端到端标准化工作流
-
-```typescript
-async function standardizedKnowledgeManagement(
-  entities: any[],
-  memoryFileName: string,
-  content: string
-) {
-  // Step 1: 健康检查
-  const health = await airis-exec({
-    tool: "gateway-control:health"
-  });
-
-  if (!health.ok) {
-    throw new Error("Gateway 不可用");
-  }
-
-  // Step 2: 发现工具
-  const memoryTools = await airis-find({ query: "memory" });
-  const serenaTools = await airis-find({ query: "serena" });
-  console.log(`Memory: ${memoryTools.length} 工具, Serena: ${serenaTools.length} 工具`);
-
-  // Step 3: 验证参数
-  const entitiesSchema = await airis-schema({
-    tool: "memory:create_entities"
-  });
-
-  // Step 4: 创建知识图谱实体
-  const createdEntities = await airis-exec({
-    tool: "memory:create_entities",
-    arguments: {
-      entities: entities // 每个实体必须包含 observations
-    }
-  });
-
-  console.log(`✅ 创建了 ${createdEntities.length} 个实体`);
-
-  // Step 5: 保存详细文档到 Serena
-  await airis-exec({
-    tool: "serena:write_memory",
-    arguments: {
-      memory_file_name: memoryFileName,
-      content: content
-    }
-  });
-
-  console.log(`✅ 文档已保存: ${memoryFileName}`);
-
-  return { entities: createdEntities };
-}
-```
-
----
-
-## ⚙️ 服务运行模式
-
-### MCP 服务器特性
-
-本 skill 使用 2 个 MCP 服务器，运行模式不同：
-
-| 服务器 | 工具数 | 运行模式 | 启动延迟 | 首次调用建议 |
-|--------|--------|---------|---------|-------------|
-| **memory** | 9 | HOT 🔥 | 无延迟 | 即时可用 |
-| **serena** | 23 | COLD ❄️ | 2-5 秒 | 使用前检查健康状态 |
-
-### 混合模式说明
-
-**本 skill 的特殊性**:
-- Memory (HOT) + Serena (COLD) 混合使用
-- Memory 操作即时响应，Serena 首次调用需等待
-- 建议先操作 Memory（无延迟），再操作 Serena（可能有延迟）
-
-### 性能优化建议
-
-#### 对于 HOT 模式服务器（Memory）:
-
-1. **可以直接调用，无需预热**
-   ```typescript
-   // ✅ 直接调用 Memory，无需等待
-   const entities = await airis-exec({
-     tool: "memory:create_entities",
-     arguments: { entities: [...] }
-   });
-   ```
-
-2. **适合高频率调用**
-   ```typescript
-   // ✅ 批量创建实体，所有调用都是即时响应
-   for (const entity of entities) {
-     await airis-exec({
-       tool: "memory:create_entities",
-       arguments: { entities: [entity] }
-     });
-   }
-   ```
-
-#### 对于 COLD 模式服务器（Serena）:
-
-1. **首次调用前预期延迟**
-   ```typescript
-   // 首次调用 Serena 可能需要等待
-   try {
-     const result = await airis-exec({
-       tool: "serena:write_memory",
-       arguments: { memory_file_name: "...", content: "..." }
-     });
-   } catch (error) {
-     if (error.message.includes("server not ready")) {
-       console.log("Serena 正在启动，等待 3 秒后重试...");
-       await sleep(3000);
-       // 重试
-     }
-   }
-   ```
-
-2. **批量操作时复用服务**
-   ```typescript
-   // ✅ 批量写入，首次调用后 Serena 已启动
-   const files = ["doc1.md", "doc2.md", "doc3.md"];
-   for (const file of files) {
-     await airis-exec({
-       tool: "serena:write_memory",
-       arguments: {
-         memory_file_name: file,
-         content: generateContent(file)
-       }
-     });
-   }
-   ```
-
----
-
-## 🔄 统一错误处理
-
-### 错误分类体系
-
-本 skill 的错误可分为 4 大类：
-
-#### 1. 参数错误 → 使用 airis-schema 预验证
-
-**典型错误**:
-```
-Error: 'observations' is required in entities
-Error: Parameter 'filename' should be 'memory_file_name'
-Error: Invalid entityType
-Error: Invalid relationType
-```
-
-**处理策略**:
-```typescript
-// ✅ 推荐：执行前验证
-const entitiesSchema = await airis-schema({
-  tool: "memory:create_entities"
-});
-
-// 检查 observations 字段
-for (const entity of entities) {
-  if (!entity.observations || entity.observations.length === 0) {
-    throw new Error(`实体 "${entity.name}" 缺少 observations 字段`);
-  }
-}
-
-// 检查 entityType
-const validEntityTypes = ["Concept", "Component", "Person", "Product", "Document"];
-for (const entity of entities) {
-  if (!validEntityTypes.includes(entity.entityType)) {
-    throw new Error(`无效的 entityType: ${entity.entityType}`);
-  }
-}
-
-// 执行创建
+// Step 3: 执行工具
 await airis-exec({
-  tool: "memory:create_entities",
-  arguments: { entities: entities }
-});
-```
-
-**预防措施**:
-- Memory: 总是为实体提供 `observations` 数组
-- Serena: 使用 `memory_file_name` 而非 `filename`
-- Memory: 使用标准的 `entityType` 和 `relationType`
-- 使用 `airis-schema` 验证参数结构
-
----
-
-#### 2. Gateway 错误 → 检查健康状态
-
-**典型错误**:
-```
-Error: Failed to connect to AIRIS MCP Gateway
-Error: Memory/Serena not found
-```
-
-**处理策略**:
-```typescript
-try {
-  const health = await airis-exec({
-    tool: "gateway-control:health"
-  });
-
-  if (!health.ok) {
-    throw new Error("Gateway 不健康");
-  }
-
-  // 验证 Memory 和 Serena 可用
-  const servers = await airis-exec({
-    tool: "gateway-control:list-servers"
-  });
-
-  const requiredServers = ["memory", "serena"];
-  const missingServers = requiredServers.filter(
-    name => !servers.find(s => s.name === name)
-  );
-
-  if (missingServers.length > 0) {
-    throw new Error(`缺少服务器: ${missingServers.join(", ")}`);
-  }
-
-} catch (error) {
-  console.error("Gateway 错误:", error.message);
-
-  throw new Error(`
-    AIRIS MCP Gateway 不可用。请检查：
-    1. Gateway 是否正在运行
-    2. Memory 和 Serena 是否已安装
-    3. 网络连接是否正常
-  `);
-}
-```
-
----
-
-#### 3. 工具执行错误 → 具体错误具体处理
-
-**典型错误**:
-```
-Error: Entity already exists
-Error: Relation target not found
-Error: Memory file too large
-```
-
-**处理策略**:
-
-**实体已存在**:
-```typescript
-try {
-  await airis-exec({
-    tool: "memory:create_entities",
-    arguments: {
-      entities: [{ name: "React", entityType: "Framework", observations: ["..."] }]
-    }
-  });
-} catch (error) {
-  if (error.message.includes("already exists")) {
-    console.log("实体已存在，跳过创建");
-    // 或者更新实体
-  } else {
-    throw error;
-  }
-}
-```
-
-**关系目标未找到**:
-```typescript
-try {
-  await airis-exec({
-    tool: "memory:create_relations",
-    arguments: {
-      relations: [
-        { from: "React", to: "Unknown", relationType: "depends-on" }
-      ]
-    }
-  });
-} catch (error) {
-  if (error.message.includes("not found")) {
-    console.log("目标实体不存在，先创建实体");
-    // 先创建目标实体，再创建关系
-  } else {
-    throw error;
-  }
-}
-```
-
-**Serena 内容过大**:
-```typescript
-try {
-  await airis-exec({
-    tool: "serena:write_memory",
-    arguments: {
-      memory_file_name: "large-doc.md",
-      content: largeContent
-    }
-  });
-} catch (error) {
-  if (error.message.includes("too large")) {
-    // 分段保存
-    const chunks = splitContent(largeContent, 50000);
-    for (const [i, chunk] of chunks.entries()) {
-      await airis-exec({
-        tool: "serena:write_memory",
-        arguments: {
-          memory_file_name: `large-doc-part-${i + 1}.md`,
-          content: chunk
-        }
-      });
-    }
-  } else {
-    throw error;
-  }
-}
-```
-
----
-
-#### 4. 服务不可用 → 验证安装和重试
-
-**典型错误**:
-```
-Error: Server 'memory' not found
-Error: Server 'serena' not ready
-```
-
-**处理策略**:
-
-**服务器未安装**:
-```typescript
-const servers = await airis-exec({
-  tool: "gateway-control:list-servers"
+  tool: "mindbase:memory_write",
+  arguments: { name: "...", content: "..." }
 });
 
-const requiredServers = ["memory", "serena"];
-const missingServers = requiredServers.filter(
-  name => !servers.find(s => s.name === name)
-);
-
-if (missingServers.length > 0) {
-  throw new Error(`
-    缺少必需的 MCP 服务器: ${missingServers.join(", ")}
-
-    请安装：
-    1. 检查 AIRIS MCP Gateway 配置
-    2. 安装 Memory 和 Serena MCP 服务器
-    3. 重启 Gateway
-  `);
-}
-```
-
-**Serena 未就绪（COLD 模式）**:
-```typescript
-async function waitForSerenaReady(maxWaitTime = 10000) {
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < maxWaitTime) {
-    const servers = await airis-exec({
-      tool: "gateway-control:list-servers"
-    });
-
-    const serena = servers.find(s => s.name === "serena");
-
-    if (serena && serena.ready) {
-      return true;
-    }
-
-    console.log(`⏳ 等待 Serena 就绪...`);
-    await sleep(2000);
-  }
-
-  return false;
-}
-
-// 使用示例
-const ready = await waitForSerenaReady();
-if (!ready) {
-  throw new Error("Serena 服务器启动超时");
-}
-```
-
----
-
-### 完整错误处理示例
-
-```typescript
-async function robustKnowledgeManagement(
-  entities: any[],
-  relations: any[],
-  memoryFile: string,
-  content: string
-) {
-  try {
-    // 1. 健康检查
-    const health = await airis-exec({
-      tool: "gateway-control:health"
-    });
-
-    if (!health.ok) {
-      throw new Error("GATEWAY_UNHEALTHY");
-    }
-
-    // 2. 验证 Memory 和 Serena 可用性
-    const servers = await airis-exec({
-      tool: "gateway-control:list-servers"
-    });
-
-    const memory = servers.find(s => s.name === "memory");
-    const serena = servers.find(s => s.name === "serena");
-
-    if (!memory || !serena) {
-      throw new Error("SERVERS_MISSING");
-    }
-
-    // 3. 参数验证
-    for (const entity of entities) {
-      if (!entity.observations || entity.observations.length === 0) {
-        throw new Error(`实体 "${entity.name}" 缺少 observations`);
-      }
-    }
-
-    // 4. 创建实体（带重试）
-    let createdEntities;
-    try {
-      createdEntities = await execWithRetry(
-        "memory:create_entities",
-        { entities: entities },
-        3
-      );
-    } catch (error) {
-      if (error.message.includes("already exists")) {
-        console.log("部分实体已存在，继续...");
-      } else {
-        throw error;
-      }
-    }
-
-    // 5. 创建关系（带重试）
-    if (relations.length > 0) {
-      await execWithRetry(
-        "memory:create_relations",
-        { relations: relations },
-        3
-      );
-    }
-
-    // 6. 保存到 Serena（带重试和分段处理）
-    if (content.length > 50000) {
-      const chunks = splitContent(content, 50000);
-      for (const [i, chunk] of chunks.entries()) {
-        await airis-exec({
-          tool: "serena:write_memory",
-          arguments: {
-            memory_file_name: `${memoryFile}-part-${i + 1}.md`,
-            content: chunk
-          }
-        });
-      }
-    } else {
-      await airis-exec({
-        tool: "serena:write_memory",
-        arguments: {
-          memory_file_name: memoryFile,
-          content: content
-        }
-      });
-    }
-
-    return { entities: createdEntities, relations: relations.length };
-
-  } catch (error) {
-    // 统一错误处理
-    console.error("知识管理失败:", error);
-
-    if (error.message === "GATEWAY_UNHEALTHY") {
-      throw new Error("AIRIS MCP Gateway 不可用");
-    } else if (error.message === "SERVERS_MISSING") {
-      throw new Error("Memory 或 Serena 未安装");
-    } else if (error.message.includes("observations")) {
-      throw new Error("实体缺少必需的 observations 字段");
-    } else {
-      throw new Error(`操作失败: ${error.message}`);
-    }
-  }
-}
+// Step 4: 健康检查（可选）
+const health = await airis-exec({ tool: "gateway-control:health" });
 ```
 
 ---
 
 ## 📚 参考文档
 
-### References 文件
+### 详细指南
 
-本 skill 包含以下参考文档（在 `references/` 目录中）:
+- **[Mindbase 标准指南](../../docs/MINDBASE_STANDARD_GUIDE.md)** - Mindbase 完整使用指南
+- **[知识架构设计](../../docs/KNOWLEDGE_ARCHITECTURE_DESIGN.md)** - 三层记忆架构设计
+- **[MCP 参数参考](../../docs/MCP_PARAMETER_REFERENCE.md)** - 完整参数文档
 
-- **entity-types.md** (~60 行) - 实体类型详解
-  - 内容: 5 种实体类型（Concept, Component, Person, Product, Document）、使用场景、命名规范
-  - 何时阅读: 不确定应该使用哪种实体类型时
+### MCP 服务器文档
 
-- **relation-patterns.md** (~60 行) - 关系模式最佳实践
-  - 内容: 6 种关系类型详解、使用场景、示例模式、常见错误
-  - 何时阅读: 需要建立复杂关系网络时
-
----
-
-## 🔗 相关资源
-
-**MCP 服务器文档**:
-- [Memory MCP](../../ai_workflow/docs/airis-mcp-gateway/servers/MEMORY.md) - 知识图谱管理
-- [Serena MCP](../../ai_workflow/docs/airis-mcp-gateway/servers/SERENA.md) - 项目记忆管理
-
-**AIRIS MCP Gateway**:
-- [完整指南](../../ai_workflow/docs/airis-mcp-gateway/README.md)
-- [快速参考](../../ai_workflow/docs/airis-mcp-gateway/QUICK_REFERENCE.md)
-
-**相关 Skills**:
-- airis-web-research - Web 研究和内容保存（Serena 记忆）
-- airis-project-indexing - 项目索引和分析
+- [Mindbase GitHub](https://github.com/kazuph/mindbase)
+- [Serena GitHub](https://github.com/oraios/serena)
+- [Memory MCP](https://github.com/modelcontextprotocol/servers)
 
 ---
 
 ## 📊 性能和限制
 
-**性能考虑**:
-- 创建实体: ~1-2 秒/批次（批量创建更快）
-- 创建关系: ~1-2 秒/批次
-- 搜索节点: ~2-3 秒/查询
-- Serena 写入: ~0.5-1 秒/文件
-- **总耗时**: 约 3-8 秒/完整流程
-
-**限制条件**:
-- Memory 实体名称: 建议 < 100 字符
-- Memory observations: 建议每个实体 1-10 个观察
-- Serena 记忆文件: 建议 < 50KB/文件
-- 知识图谱规模: 建议 < 1000 个实体（性能考虑）
+| 操作 | Mindbase | Serena | Memory MCP |
+|------|----------|--------|------------|
+| **写入延迟** | 500-1000ms | 200-500ms | <100ms |
+| **读取延迟** | 200-500ms | 100-200ms | <50ms |
+| **搜索延迟** | 0.5-1s | 1-2s | N/A |
+| **扩展性** | 高（数据库） | 中（文件） | 低（JSON） |
+| **持久化** | ✅ 永久 | ✅ 永久 | ❌ 会话级 |
 
 **最佳实践**:
-- 批量创建实体（一次调用创建多个）而非逐个创建
-- 使用语义化的实体命名（易于搜索和理解）
-- 定期清理过时的知识图谱节点
-- Serena 记忆文件使用日期后缀便于版本追踪
-- 组合使用 Memory（结构化）+ Serena（文档化）获得最佳效果
+- 批量操作：一次调用处理多个项目
+- 语义命名：使用清晰的名称和标签
+- 定期清理：删除过时的记忆和对话
+- 分类管理：使用 category 和 project 组织内容
 
 ---
 
-**版本**: 1.0.0
-**最后更新**: 2025-12-30
+**版本**: 2.0.0
+**最后更新**: 2025-01-15
 **作者**: Hao
+**状态**: ✅ 已更新为三层架构
