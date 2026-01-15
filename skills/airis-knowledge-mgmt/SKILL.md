@@ -90,6 +90,68 @@ description: 知识管理助手，整合 Mindbase（长期记忆）、Serena（�
 
 ---
 
+## 🔄 标准化工作流程
+
+### COLD 模式服务器启动
+
+**重要**: Serena 和 Memory MCP 都是 COLD 模式服务器，首次使用前需要触发启动。
+
+#### 正确的启动方法
+
+```typescript
+// ✅ 步骤 1: 触发服务器启动（使用 server 参数）
+await airis-find({ server: "serena" });
+await airis-find({ server: "memory" });
+
+// ✅ 步骤 2: 验证服务器已启动（应该显示工具列表）
+// 返回: serena (cold, enabled): 29 tools
+// 返回: memory (cold, enabled): 9 tools
+```
+
+#### 常见错误
+
+```typescript
+// ❌ 错误方法 - 不会触发 COLD 服务器启动
+await airis-find({ query: "serena" });
+// 结果: serena (cold, enabled): 0 tools ⚠️
+
+// ✅ 正确方法
+await airis-find({ server: "serena" });
+// 结果: serena (cold, enabled): 29 tools ✅
+```
+
+### Serena 项目激活要求
+
+**关键规则**: 使用任何 Serena 工具之前，必须先激活项目。
+
+```typescript
+// Step 1: 激活项目（必需）
+await airis-exec({
+  tool: "serena:activate_project",
+  arguments: {
+    project: "."  // 当前目录，或使用已注册的项目名称
+  }
+});
+// 返回: "The project with name 'xxx' at /path is activated."
+
+// Step 2: 使用其他 Serena 工具
+await airis-exec({
+  tool: "serena:write_memory",
+  arguments: {
+    memory_file_name: "project-notes",
+    content: "# 项目笔记\n..."
+  }
+});
+```
+
+**错误处理**:
+```typescript
+// 如果未激活项目，会收到错误：
+// "Error: No active project. Ask the user to provide the project path..."
+```
+
+---
+
 ## 📋 Mindbase - 长期记忆（推荐）
 
 ### 核心功能
@@ -363,6 +425,25 @@ const session = await airis-exec({
 
 Serena 提供项目级文档化记忆管理，保存到 `.serena/memories/` 目录。
 
+### ⚠️ 重要前提条件
+
+**必须先激活项目**: 使用任何 Serena 工具前，必须调用 `activate_project`
+
+```typescript
+// 激活当前目录作为项目
+await airis-exec({
+  tool: "serena:activate_project",
+  arguments: { project: "." }
+});
+// 返回: "The project with name 'xxx' at /path is activated."
+```
+
+**错误示例**:
+```typescript
+// 如果未激活项目就调用其他工具，会收到错误：
+// "Error: No active project. Ask the user to provide the project path..."
+```
+
 ### 工具列表
 
 #### 1. write_memory
@@ -431,50 +512,131 @@ await airis-exec({
 }
 ```
 
+#### 5. edit_memory
+
+**功能**: 编辑记忆文件内容（正则或字面量替换）
+
+**⚠️ 关键陷阱：参数名称是 `needle`、`repl`、`mode`**
+
+**参数**:
+```typescript
+{
+  memory_file_name: string;  // 必需：文件名
+  needle: string;            // 必需：要替换的内容（正则或字面量）
+  repl: string;              // 必需：替换后的内容
+  mode: "literal" | "regex"; // 必需：匹配模式
+}
+```
+
+**示例 - 字面量替换**:
+```typescript
+await airis-exec({
+  tool: "serena:edit_memory",
+  arguments: {
+    memory_file_name: "project-status",
+    needle: "状态: 进行中",
+    repl: "状态: 已完成",
+    mode: "literal"
+  }
+});
+```
+
+**示例 - 正则替换**:
+```typescript
+await airis-exec({
+  tool: "serena:edit_memory",
+  arguments: {
+    memory_file_name: "project-status",
+    needle: "进度: \\d+%",
+    repl: "进度: 100%",
+    mode: "regex"
+  }
+});
+```
+
 ---
 
-## 📋 Memory MCP - 短期记忆（可选）
+## 📋 Memory MCP - 短期记忆
 
 ### 核心功能
 
-Memory MCP 提供会话级临时记忆，用于快速构建实体-关系图谱。
+Memory MCP 提供会话级知识图谱，用于构建实体-关系网络。
 
-**注意**: Memory MCP 工具可能在某些配置中不可用，使用前请通过 `airis-find` 验证。
+**状态**: ✅ 所有工具已验证可用（2026-01-15）
 
-### 预期工具（需验证）
+### 完整工具清单（9 个）
+
+| 工具 | 功能 | 状态 |
+|------|------|------|
+| `memory:create_entities` | 创建多个实体 | ✅ 已验证 |
+| `memory:create_relations` | 创建实体间关系 | ✅ 已验证 |
+| `memory:add_observations` | 添加实体观察 | ✅ 可用 |
+| `memory:delete_entities` | 删除实体 | ✅ 可用 |
+| `memory:delete_observations` | 删除观察 | ✅ 可用 |
+| `memory:delete_relations` | 删除关系 | ✅ 可用 |
+| `memory:read_graph` | 读取整个图谱 | ✅ 已验证 |
+| `memory:search_nodes` | 搜索节点 | ✅ 已验证 |
+| `memory:open_nodes` | 打开特定节点 | ✅ 可用 |
+
+### 标准工作流
 
 ```typescript
-// 知识图谱操作
-memory:create_entities     // 创建实体
-memory:create_relations     // 创建关系
-memory:search_nodes        // 搜索节点
-memory:get_entity          // 获取实体详情
-```
+// Step 1: 触发服务器启动
+await airis-find({ server: "memory" });
 
-### 使用示例
+// Step 2: 创建实体
+await airis-exec({
+  tool: "memory:create_entities",
+  arguments: {
+    entities: [
+      {
+        name: "UserService",
+        entityType: "Component",
+        observations: [
+          "处理用户认证",
+          "提供 REST API"
+        ]
+      },
+      {
+        name: "DatabaseLayer",
+        entityType: "Component",
+        observations: [
+          "PostgreSQL 数据库",
+          "处理数据持久化"
+        ]
+      }
+    ]
+  }
+});
 
-```typescript
-// 验证工具可用性
-const memoryTools = await airis-find({ query: "memory" });
+// Step 3: 创建关系
+await airis-exec({
+  tool: "memory:create_relations",
+  arguments: {
+    relations: [
+      {
+        from: "UserService",
+        to: "DatabaseLayer",
+        relationType: "depends_on"
+      }
+    ]
+  }
+});
 
-if (memoryTools.some(t => t.name === "memory:create_entities")) {
-  // 创建实体
-  await airis-exec({
-    tool: "memory:create_entities",
-    arguments: {
-      entities: [
-        {
-          name: "UserService",
-          entityType: "Component",
-          observations: [
-            "负责用户认证和授权",
-            "提供 REST API 接口"
-          ]
-        }
-      ]
-    }
-  });
-}
+// Step 4: 读取完整图谱
+const graph = await airis-exec({
+  tool: "memory:read_graph",
+  arguments: {}
+});
+// 返回: { entities: [...], relations: [...] }
+
+// Step 5: 语义搜索
+const results = await airis-exec({
+  tool: "memory:search_nodes",
+  arguments: {
+    query: "用户认证相关组件"
+  }
+});
 ```
 
 ---
@@ -580,7 +742,16 @@ const conversations = await airis-exec({
 **场景**: 保存项目级架构决策
 
 ```typescript
-// 保存到 Serena（项目记忆）
+// Step 1: 触发 Serena 服务器启动
+await airis-find({ server: "serena" });
+
+// Step 2: 激活项目（必需）
+await airis-exec({
+  tool: "serena:activate_project",
+  arguments: { project: "." }
+});
+
+// Step 3: 保存到 Serena（项目记忆）
 await airis-exec({
   tool: "serena:write_memory",
   arguments: {
@@ -619,18 +790,26 @@ await airis-exec({
 **场景**: 完整的知识管理流程
 
 ```typescript
+// Step 0: 触发 COLD 服务器启动
+await airis-find({ server: "memory" });
+await airis-find({ server: "serena" });
+
+// Step 0.1: 激活 Serena 项目（必需）
+await airis-exec({
+  tool: "serena:activate_project",
+  arguments: { project: "." }
+});
+
 // Step 1: 当前会话快速思考（Memory MCP）
-if (hasMemoryTools) {
-  await airis-exec({
-    tool: "memory:create_entities",
-    arguments: {
-      entities: [
-        { name: "AuthModule", entityType: "Component", observations: ["认证模块"] },
-        { name: "JWT", entityType: "Concept", observations: ["JSON Web Token"] }
-      ]
-    }
-  });
-}
+await airis-exec({
+  tool: "memory:create_entities",
+  arguments: {
+    entities: [
+      { name: "AuthModule", entityType: "Component", observations: ["认证模块"] },
+      { name: "JWT", entityType: "Concept", observations: ["JSON Web Token"] }
+    ]
+  }
+});
 
 // Step 2: 保存到项目记忆（Serena）
 await airis-exec({
@@ -735,6 +914,130 @@ const health = await airis-exec({ tool: "gateway-control:health" });
 
 ---
 
+## 🔧 故障排查
+
+### 问题 1: Serena 报错 "No active project"
+
+**症状**:
+```
+Error: No active project. Ask the user to provide the project path...
+```
+
+**原因**: 未激活项目就尝试使用 Serena 工具
+
+**解决方案**:
+```typescript
+// 先激活项目
+await airis-exec({
+  tool: "serena:activate_project",
+  arguments: { project: "." }
+});
+
+// 然后使用其他工具
+await airis-exec({
+  tool: "serena:write_memory",
+  arguments: { ... }
+});
+```
+
+### 问题 2: airis-find 返回 0 tools
+
+**症状**:
+```
+serena (cold, enabled): 0 tools
+memory (cold, enabled): 0 tools
+```
+
+**原因**: 使用了错误的参数名称
+
+**解决方案**:
+```typescript
+// ❌ 错误 - 不会触发 COLD 服务器启动
+await airis-find({ query: "serena" });
+
+// ✅ 正确 - 触发 COLD 服务器启动
+await airis-find({ server: "serena" });
+```
+
+### 问题 3: Memory MCP 工具不可用
+
+**症状**:
+```
+MCP error -32602: Tool not found: memory:create_entities
+```
+
+**原因**: 服务器未启动
+
+**解决方案**:
+```typescript
+// 先触发启动
+await airis-find({ server: "memory" });
+
+// 验证工具可用（应该显示 9 tools）
+// 然后使用工具
+await airis-exec({
+  tool: "memory:read_graph",
+  arguments: {}
+});
+```
+
+### 问题 4: edit_memory 参数错误
+
+**症状**:
+```
+3 validation errors for applyArguments
+needle: Field required
+repl: Field required
+mode: Field required
+```
+
+**原因**: 使用了错误的参数名称
+
+**解决方案**:
+```typescript
+// ❌ 错误
+{
+  pattern: "old text",
+  replacement: "new text"
+}
+
+// ✅ 正确
+{
+  needle: "old text",
+  repl: "new text",
+  mode: "literal"
+}
+```
+
+### 问题 5: Mindbase 工具找不到
+
+**症状**:
+```
+Server 'mindbase' not found
+```
+
+**原因**: Mindbase 可能未启用或未在 Docker Gateway 中运行
+
+**解决方案**:
+```typescript
+// 1. 检查 Mindbase 是否启用
+await airis-exec({
+  tool: "gateway-control:list_servers",
+  arguments: {}
+});
+
+// 2. 如果 Mindbase 显示为 disabled，启用它
+await airis-exec({
+  tool: "gateway-control:enable_server",
+  arguments: { server_name: "mindbase" }
+});
+
+// 3. 验证 Mindbase 工具可用
+await airis-find({ server: "mindbase" });
+```
+
+---
+
 ## 📚 参考文档
 
 ### 详细指南
@@ -769,7 +1072,7 @@ const health = await airis-exec({ tool: "gateway-control:health" });
 
 ---
 
-**版本**: 2.0.0
-**最后更新**: 2025-01-15
+**版本**: 2.1.0
+**最后更新**: 2026-01-15
 **作者**: Hao
-**状态**: ✅ 已更新为三层架构
+**状态**: ✅ 已验证和更新（包含 COLD 模式启动指南）
