@@ -108,8 +108,12 @@ docker compose ps
 # NAME                    STATUS
 # airis-mcp-gateway-api   Up
 # airis-mcp-gateway       Up
-# mindbase-postgres       Up (如果启用 MindBase)
-# mindbase-ollama         Up (如果启用 MindBase)
+# mindbase-postgres       Up (如果已配置并启用 MindBase)
+# mindbase-ollama         Up (如果已配置并启用 MindBase)
+
+# 注意: MindBase 服务器默认可能处于禁用状态
+# 如需启用，使用: airis-mcp-gateway-control:gateway_enable_server
+# 参数: {"server_name": "mindbase"}
 
 # 2. 检查端口监听
 netstat -tuln | grep 9400
@@ -148,12 +152,30 @@ curl -s http://localhost:9400/api/tools/status | jq '.servers[] | {name, status,
 #   "status": "cold",
 #   "mode": "cold"
 # }
+# {
+#   "name": "mindbase",
+#   "status": "stopped",  # docker 模式，需要显式启用
+#   "mode": "docker"
+# }
 ```
 
 **状态说明**:
 - `ready` (HOT 模式) - 服务器已启动并就绪
 - `cold` (COLD 模式) - 服务器未启动，将按需启动
+- `stopped` (Docker 模式) - Docker 服务器，需要显式启用
 - `error` - 服务器配置错误或启动失败
+
+**启用 Docker 模式服务器（如 mindbase）**:
+```typescript
+// 使用 Gateway Control 启用服务器
+await airis-exec({
+  tool: "airis-mcp-gateway-control:gateway_enable_server",
+  arguments: {
+    server_name: "mindbase"
+  }
+});
+// 预期: Server "mindbase" enabled. State: stopped
+```
 
 **如果状态为 error**:
 ```bash
@@ -488,5 +510,72 @@ sudo tcpdump -i lo -A 'tcp port 9400'
 
 ---
 
-**最后更新**: 2025-12-31
+## 🔧 MindBase MCP 服务器特殊说明
+
+**服务器**: `mindbase`
+**模式**: Docker (需要显式启用)
+**主要功能**: 会话记录持久化、对话语义搜索
+
+### 启用 MindBase 服务器
+
+```typescript
+// Step 1: 启用服务器
+await airis-exec({
+  tool: "airis-mcp-gateway-control:gateway_enable_server",
+  arguments: {
+    server_name: "mindbase"
+  }
+});
+// 预期: Server "mindbase" enabled. State: stopped
+```
+
+### 可用工具
+
+**conversation_save** - 保存会话记录
+```typescript
+await airis-exec({
+  tool: "mindbase:conversation_save",
+  arguments: {
+    source: "claude-code",  // 来源平台
+    title: "会话标题",
+    content: {
+      summary: "会话摘要",
+      stage: "阶段信息",
+      // ... 其他会话上下文
+    },
+    category: "progress",    // task|decision|progress|note|warning|error
+    priority: "high",        // critical|high|normal|low
+    channel: "project-name",
+    metadata: {
+      project: "project-id",
+      tags: ["tag1", "tag2"]
+    }
+  }
+});
+```
+
+**常见错误**:
+- ❌ 使用不存在的 `mindbase:memory_write`
+- ✅ 正确使用 `mindbase:conversation_save`
+
+### 验证 MindBase 功能
+
+```typescript
+// 测试保存会话
+const result = await airis-exec({
+  tool: "mindbase:conversation_save",
+  arguments: {
+    source: "claude-code",
+    title: "MindBase 验证测试",
+    content: { test: "验证内容" },
+    category: "note",
+    priority: "normal"
+  }
+});
+// 预期: {} (成功) 或 { error: "..." } (失败)
+```
+
+---
+
+**最后更新**: 2026-01-15
 **适用版本**: AIRIS MCP Gateway v2.0+, howie_skills v1.0+

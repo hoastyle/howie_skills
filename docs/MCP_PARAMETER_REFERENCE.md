@@ -951,6 +951,92 @@ await airis-exec({
 
 ---
 
+### MindBase MCP 服务器 (Docker 模式)
+
+**服务器**: `mindbase`
+**模式**: Docker (需要显式启用)
+**主要功能**: 会话记录持久化、对话语义搜索
+
+#### conversation_save
+
+**用途**: 保存会话记录到数据库
+
+**必需参数**:
+- `source` (string) - 来源平台
+  - 支持值: `"claude-code"`, `"claude-desktop"`, `"chatgpt"`, `"cursor"`, `"windsurf"`
+- `title` (string) - 会话标题或摘要
+- `content` (object) - 会话内容（可包含任意结构化数据）
+
+**可选参数**:
+- `category` (string) - 会话类别
+  - 支持值: `"task"`, `"decision"`, `"progress"`, `"note"`, `"warning"`, `"error"`
+- `priority` (string) - 优先级
+  - 支持值: `"critical"`, `"high"`, `"normal"`, `"low"`
+- `channel` (string) - 频道或工作区标识符
+- `sessionId` (string) - 会话 ID
+- `metadata` (object) - 额外元数据
+
+**示例**:
+```typescript
+await airis-exec({
+  tool: "mindbase:conversation_save",
+  arguments: {
+    source: "claude-code",
+    title: "Obsidian 知识库优化项目 - 会话记录",
+    content: {
+      summary: "基于 kepano 思想优化知识库",
+      stage: "阶段一、二已完成",
+      achievements: ["14 个模板", "25 个视图"],
+      domains: ["机器人", "ML", "编程"]
+    },
+    category: "progress",
+    priority: "high",
+    channel: "notebook",
+    metadata: {
+      project: "obsidian-knowledge-base",
+      date: "2026-01-15",
+      reference: "kepano"
+    },
+    sessionId: "obsidian_optimization_2025_01_15"
+  }
+});
+```
+
+**关键注意事项**:
+- ⚠️ **必须先启用服务器**: 使用 `gateway_enable_server` 启用 mindbase
+- ⚠️ **错误工具不存在**: `mindbase:memory_write` 不存在，应使用 `conversation_save`
+- ⚠️ `content` 参数应该是对象，包含结构化数据
+- ⚠️ `source` 参数必须使用支持的枚举值
+
+**常见错误**:
+- ❌ 使用不存在的工具: `mindbase:memory_write` → ✅ `mindbase:conversation_save`
+- ❌ 服务器未启用 → 先调用 `gateway_enable_server`
+- ❌ `source` 参数值错误 → 必须使用支持的枚举值
+
+---
+
+### Time MCP 服务器 (Docker 模式)
+
+**服务器**: `time`
+**模式**: Docker (需要显式启用)
+**主要功能**: 时区转换
+
+#### convert_time
+
+**用途**: 在不同时区间转换时间
+
+**示例**:
+```typescript
+await airis-exec({
+  tool: "time:convert_time",
+  arguments: {
+    // 具体参数请参考工具 schema
+  }
+});
+```
+
+---
+
 ## 🔍 参数命名模式总结
 
 ### 模式 1: 文件/路径相关
@@ -1164,13 +1250,18 @@ try {
 
 ## 🚀 后续改进
 
-- [ ] 添加更多 MCP 服务器（MindBase, Time, Gateway Control, AIRIS Commands）
+- [x] 添加 MindBase MCP 服务器文档（conversation_save）
+- [x] 添加 Time MCP 服务器文档（convert_time）
 - [ ] 补充每个工具的返回值结构示例
 - [ ] 添加常见错误的完整错误信息示例
 - [ ] 创建交互式参数验证工具
 
 ---
 
-**文档版本**: v1.0
-**最后更新**: 2025-12-31
+**文档版本**: v1.1
+**最后更新**: 2026-01-15
 **维护**: Howie Skills Team
+**更新内容**:
+- ✅ 新增 MindBase MCP 服务器完整文档
+- ✅ 新增 Time MCP 服务器基础文档
+- ✅ 修正 MindBase 服务器启用说明
