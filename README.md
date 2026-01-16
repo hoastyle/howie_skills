@@ -1,6 +1,6 @@
 # Howie AIRIS Skills
 
-> 7 个 Helper Skills 简化 AIRIS MCP Gateway 常见操作
+> 8 个 Helper Skills 简化 AIRIS MCP Gateway 和三层记忆管理
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/your-org/howie_skills)
@@ -65,10 +65,11 @@ ls ~/.claude/skills/
 
 ## 📚 Skills 索引
 
-### Full Release (v1.0.0) - 7 个完整 Skills ✅
+### Full Release (v1.1.0) - 8 个完整 Skills ✅
 
 | Skill | 功能 | MCP 服务器 | 复杂度 | 行数 | 状态 |
 |-------|------|-----------|--------|------|------|
+| **memory-management** | 三层记忆管理 (自动层级选择 + 智能召回) | memory, serena, mindbase | 中等 | 400 | ✅ 完成 |
 | **airis-web-research** | Web 研究流程 (Tavily → Fetch → Serena) | tavily, fetch, serena | 中等 | 558 | ✅ 完成 |
 | **airis-code-search** | 代码搜索编辑 (MorphLLM 占位符模式) | morphllm, serena | 中高 | 622 | ✅ 完成 |
 | **airis-knowledge-mgmt** | 知识图谱管理 (Memory + Serena) | memory, serena | 中等 | 572 | ✅ 完成 |
@@ -77,7 +78,7 @@ ls ~/.claude/skills/
 | **airis-ui-generation** | UI 组件生成 (Magic 绝对路径模式) | magic | 简单 | 420 | ✅ 完成 |
 | **airis-project-indexing** | 项目索引分析 (AIRIS Agent 三功能) | airis-agent | 中等 | 305 | ✅ 完成 |
 
-**总行数**: 3,498 行（仅 SKILL.md）
+**总行数**: 3,898 行（仅 SKILL.md）
 
 ### 质量指标 ✨
 
@@ -93,6 +94,7 @@ ls ~/.claude/skills/
 - ✅ P1 阶段（2025-12-31）：手动验证确认 100% 准确性
 - ✅ 完整参数参考：`docs/MCP_PARAMETER_REFERENCE.md` (1,162 行)
 - ✅ 验证报告：`docs/FINAL_VALIDATION_REPORT_P1.md`
+- ✅ v1.1.0（2026-01-16）：新增 memory-management skill（三层记忆管理）
 
 ---
 
